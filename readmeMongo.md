@@ -1,18 +1,18 @@
 ```bash
 # 1) Nuke any old test container (safe if it doesn't exist)
-docker rm -f mongo-test 2>/dev/null || true
+docker rm -f (mongoDBname) 2>/dev/null || true
 
 # 2) Start a clean instance with NO host volume (rules out permissions issues)
-docker run -d --name mongo-test \
-  -p 27018:27017 \
+docker run -d --name mongodb \
+  -p 27017:27017 \
   mongo:6.0 --bind_ip_all
 
 # 3) Watch startup logs (look for "Waiting for connections" and "port: 27017")
-docker logs -f mongo-test | sed -n '1,120p'
+docker logs -f (mongoDBname) | sed -n '1,120p'
 
 # 4) From host, verify the port and connect
-nc -vz 127.0.0.1 27018
-mongosh "mongodb://127.0.0.1:27018"
+nc -vz 127.0.0.1 27017
+mongosh "mongodb://127.0.0.1:27017"
 ```
 
 use TradeStoreDB
