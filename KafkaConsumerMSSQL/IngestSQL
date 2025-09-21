@@ -1,0 +1,175 @@
+import asyncio
+import json
+import pyodbc
+from aiokafka import AIOKafkaConsumer
+import os
+import datetime as dt
+import logging
+from typing import Any, Optional                       
+log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+
+
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "127.0.0.1:9092")
+KAFKA_TOPIC     = os.getenv("KAFKA_TOPIC", "trades")
+KAFKA_GROUP     = os.getenv("KAFKA_GROUP", "trade-consumer-B")
+
+MSSQL_CONN_STRING = (
+    "Driver={ODBC Driver 18 for SQL Server};"
+    "Server=127.0.0.1,1433;"
+    "Database=trade_store;"
+    "UID=sa;"
+    "PWD=Str0ngP@ssw0rd!;"
+    "TrustServerCertificate=Yes;"
+)
+
+_DATE_FORMATS = [
+    "%Y-%m-%d",                # 2021-05-20  (ISO date)
+    "%Y-%m-%dT%H:%M:%S",       # 2021-05-20T14:30:00
+    "%Y-%m-%dT%H:%M:%S.%f",    # 2021-05-20T14:30:00.123
+    "%d/%m/%Y",                # 20/05/2021 (DMY — common cause of 22007)
+    "%m/%d/%Y",                # 05/20/2021
+]
+
+
+async def insert_record(record):
+    maturity_date = _parse_date(record.get("maturity_date"))
+    today = dt.date.today()
+    # if maturity_date is not None and maturity_date < today:
+    #     log.warning("Rejected trade %r: maturity date %r is earlier than today (%r)", record.get("trade_id"), maturity_date, today)
+    #     print(f"Rejected trade {record.get('trade_id')}: maturity date {maturity_date} is earlier than today ({today})")
+    #     return  # Reject the trade
+    def _sync_insert():
+        conn = pyodbc.connect(MSSQL_CONN_STRING)
+        cursor = conn.cursor()
+
+
+        cursor.execute("SELECT max(version) as version FROM trades WHERE trade_id=? and book_id=?", (record.get("trade_id"),record.get("book_id")))
+        row = cursor.fetchone()
+        try:
+            incoming_version = int(record.get("version"))
+        except Exception:
+            log.warning("Invalid incoming version: %r", record.get("version"))
+            cursor.close()
+            conn.close()
+            return
+        
+        existing_version = None
+        if row and row[0] is not None:
+            try:
+                existing_version = int(row[0])
+            except Exception:
+                log.warning("Invalid existing version in DB: %r", row[0])
+                existing_version = None
+
+        
+        if existing_version is not None:
+            if incoming_version < existing_version:
+                log.warning("Rejected trade %r: incoming version %r is lower than existing version %r", record.get("trade_id"), incoming_version, existing_version)
+                print(f"Rejected trade {record.get('trade_id')}: incoming version {incoming_version} is lower than existing version {existing_version}")
+                cursor.close()
+                conn.close()
+                return  # Reject lower version
+            # If same version, update; if higher, update (or insert if needed)
+            updated = cursor.execute("""
+                UPDATE trades
+                SET counterparty_id=?, book_id=?, maturity_date=?, created_date=?, expired=?, version=?
+                WHERE trade_id=? AND version=?
+            """, (
+                record.get("counterparty_id"),
+                record.get("book_id"),
+                maturity_date,
+                _parse_date(record.get("created_date")),
+                record.get("expired"),
+                incoming_version,
+                record.get("trade_id"),
+                existing_version,
+            )).rowcount
+            if updated == 0:
+                # If no rows updated (shouldn't happen), insert new
+                cursor.execute("""
+                    INSERT INTO trades (trade_id, version, counterparty_id, book_id, maturity_date, created_date, expired)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    record.get("trade_id"),
+                    incoming_version,
+                    record.get("counterparty_id"),
+                    record.get("book_id"),
+                    maturity_date,
+                    _parse_date(record.get("created_date")),
+                    record.get("expired"),
+                ))
+        else:
+            # No existing trade, insert new
+            cursor.execute("""
+                INSERT INTO trades (trade_id, version, counterparty_id, book_id, maturity_date, created_date, expired)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                record.get("trade_id"),
+                incoming_version,
+                record.get("counterparty_id"),
+                record.get("book_id"),
+                maturity_date,
+                _parse_date(record.get("created_date")),
+                record.get("expired"),
+            ))
+    
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    # Run blocking DB insert in a worker thread
+    await asyncio.to_thread(_sync_insert)
+
+def _parse_date(value: Any) -> Optional[dt.date]:
+    if value in (None, "", "null", "None"):
+        return None
+    if isinstance(value, dt.date) and not isinstance(value, dt.datetime):
+        return value
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, (int, float)):
+        # interpret as unix seconds if it looks plausible
+        try:
+            return dt.datetime.utcfromtimestamp(float(value)).date()
+        except Exception:
+            pass
+    s = str(value).strip()
+    # try ISO first
+    try:
+        # dt.fromisoformat handles many variants, including 'YYYY-MM-DD'
+        return dt.datetime.fromisoformat(s.replace("Z", "+00:00")).date()
+    except Exception:
+        pass
+    # try known formats
+    for fmt in _DATE_FORMATS:
+        try:
+            return dt.datetime.strptime(s, fmt).date()
+        except Exception:
+            continue
+    # last resort: let SQL handle NULL instead of raising
+    log.warning("Unparseable date string: %r -> using NULL", value)
+    return None
+
+
+async def consume():
+    consumer = AIOKafkaConsumer(
+        KAFKA_TOPIC,
+        bootstrap_servers=KAFKA_BOOTSTRAP,
+        group_id=KAFKA_GROUP,
+        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+        auto_offset_reset="earliest",
+        enable_auto_commit=True,  # set False + commit manually after writes if you need stricter control
+    )
+    await consumer.start()
+    try:
+        async for msg in consumer:
+            record = msg.value
+            print("Consumed:", record)
+            await insert_record(record)
+    finally:
+        await consumer.stop()
+
+if __name__ == "__main__":
+    asyncio.run(consume())
