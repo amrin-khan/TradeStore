@@ -55,7 +55,7 @@ async def consumer_task():
     mcli = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
     await mcli.admin.command("ping")
     coll = mcli[MONGO_DB][MONGO_COLL]
-
+    print(f"teempm {mcli[MONGO_DB][MONGO_COLL]} {MONGO_DB} {MONGO_COLL} {MONGO_URI}")    
     consumer = AIOKafkaConsumer(
         KAFKA_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP,
@@ -67,9 +67,8 @@ async def consumer_task():
         request_timeout_ms=70000,
         max_poll_interval_ms=300000,
     )
-
     await consumer.start()
-    print(f"[kafka] connected {KAFKA_BOOTSTRAP} topic={KAFKA_TOPIC} group={KAFKA_GROUP}")
+    print("xyz" f"[kafka] connected {KAFKA_BOOTSTRAP} topic={KAFKA_TOPIC} group={KAFKA_GROUP}")
     try:
         while not shutdown.is_set():
             batch_map = await consumer.getmany(timeout_ms=POLL_TIMEOUT_MS, max_records=MAX_RECORDS)
@@ -96,8 +95,9 @@ async def consumer_task():
 
                     # Add ingestion datetime
                     doc["ingest_time"] = datetime.utcnow()
-
+                    print(f"[msg] {tp.topic}[{tp.partition}]@{msg.offset} id={doc['_id']} {doc['ingest_time']}")
                     ops.append(InsertOne(doc))
+                    print(f"amrin2 ops length: {len(ops)} {ops[0]}")
 
             if not ops:
                 await consumer.commit()
@@ -105,6 +105,8 @@ async def consumer_task():
 
             try:
                 for i in range(0, len(ops), BULK_CHUNK):
+                    print("amrin1" f"[mongo] writing chunk {i}-{min(i+BULK_CHUNK, len(ops))} of {len(ops)}")
+                    print(f"amrinnnnn4 {coll}")
                     await coll.bulk_write(ops[i:i+BULK_CHUNK], ordered=False)
                     await asyncio.sleep(0)  # let heartbeats run
                 await consumer.commit()
