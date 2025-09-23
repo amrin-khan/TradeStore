@@ -1,4 +1,4 @@
-# main.py -  uvicorn main:app --reload --port 8000
+# main.py -  uvicorn main:app --reload --port 8001
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from datetime import date
@@ -55,7 +55,6 @@ async def receive_and_publish(trade: Trade):
     """
     Accept a trade JSON, store it (demo), publish to Kafka, and return a response.
     """
-    print("amrin")
     # 1) quick validation on expired
     if trade.expired.upper() not in {"Y", "N"}:
         raise HTTPException(400, "expired must be 'Y' or 'N'")
@@ -70,10 +69,12 @@ async def receive_and_publish(trade: Trade):
 
     # 3) "store" locally (demo)
     trade_store.append(payload)
+    print("amrin")
 
     # 4) publish to Kafka
     if producer is None:
         # You can choose to still accept with a different status if Kafka is down
+        print("Kafka producer not ready")
         raise HTTPException(503, "Kafka producer not ready")
     try:
           # STRICT header typing: (str, bytes)
@@ -83,14 +84,15 @@ async def receive_and_publish(trade: Trade):
         ]
         # quick sanity asserts (remove later)
         assert all(isinstance(k, str) and (v is None or isinstance(v, (bytes, bytearray))) for k, v in headers)
-
         metadata = await producer.send_and_wait(
             topic=TOPIC,
             value=payload,
             key=key_for(trade),
             headers=headers,
         )
+        print(f"published to Kafka topic {metadata.topic} partition {metadata.partition} offset {metadata.offset}")
     except Exception as e:
+        print("publish failed")
         # Decide policy: return 503 or 207 (multi-status) or accept but flag failure
         raise HTTPException(503, f"Kafka publish failed: {e}")
 
