@@ -69,5 +69,9 @@ def post_json_rows(rows: Iterable[Dict[str, str]]) -> None:
             print(f"[ERR] line {i}: {e}", file=sys.stderr)
 
 if __name__ == "__main__":
-    rows=csv_to_json(CSV_PATH)
-    post_json_rows(rows)    
+    try:
+        rows = csv_to_json(CSV_PATH)
+        post_json_rows(rows)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Exiting.", file=sys.stderr)
+        sys.exit(1)
