@@ -1,0 +1,70 @@
+ocker compose --profile dev up inputfeed
+docker compose --profile dev build inputfeed
+
+docker compose ps tradedata
+docker compose logs tradedata
+
+
+brew tap microsoft/mssql-release https://github.com/Microsoft/homebrew-mssql-release
+brew update
+brew install msodbcsql18 mssql-tools18
+
+
+docker compose down -v
+
+
+Recreate just the consumer with the new env:
+docker compose up -d --no-deps --build kafkaconsumer
+docker compose logs -f kafkaconsumer
+
+
+
+ **********
+  # run in background (recommended)
+docker compose up -d
+
+# build images before starting (only for changed services)
+docker compose up -d --build
+
+# start only one service (and its deps unless --no-deps)
+docker compose up -d <service>
+
+# rebuild & replace just one running service (don’t touch deps)
+docker compose up -d --no-deps --build <service>
+
+# show logs in the foreground (handy for first run)
+docker compose up        # Ctrl+C to stop
+docker compose logs -f   # after starting with -d
+
+# scale a service
+docker compose up -d --scale <service>=3
+
+# specify files / project name (if not in the compose dir)
+docker compose -f docker-compose.yml -f override.yml up -d
+docker compose -p tradestore up -d
+**********
+  
+  
+  MSSQL user defined n/w 
+
+  Same n/w — final working 
+# 1) Create a user-defined network
+docker network create mssqlnet 2>/dev/null || true
+
+# 2) Run SQL Server on that network
+docker rm -f mssql 2>/dev/null || true
+docker run -d --name mssql --platform linux/amd64 \
+  --network mssqlnet \
+  -e ACCEPT_EULA=Y -e SA_PASSWORD='Str0ng!Passw0rd' \
+  -p 1433:1433 \
+  mcr.microsoft.com/mssql/server:2022-latest
+
+# 3) Run tools on the SAME network and connect by container name
+docker run -it --rm --platform linux/amd64 --network mssqlnet \
+  mcr.microsoft.com/mssql-tools:latest \
+  /bin/bash -lc '
+    C=${C:-/opt/mssql-tools/bin/sqlcmd}; [ -x /opt/mssql-tools18/bin/sqlcmd ] && C=/opt/mssql-tools18/bin/sqlcmd;
+    "$C" -S mssql,1433 -U sa -P "Str0ng!Passw0rd" -C -l 30 -Q "SELECT @@version;"
+  '
+
+  '
