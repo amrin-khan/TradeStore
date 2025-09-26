@@ -1,1 +1,1 @@
-# trade-store
+# tradestore
