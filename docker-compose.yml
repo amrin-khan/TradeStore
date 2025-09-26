@@ -1,0 +1,151 @@
+# docker-compose.yml
+networks:
+  mssqlnet:
+    name: mssql-net   # fixed name so external tools (DDL compose) can attach    
+  appnet:
+    name: trade-net   # fixed name so external tools (DDL compose) can attach
+
+volumes:
+  mongo-data:
+  mssql-data:
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:latest
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=redpanda:33145
+    ports:
+      - "9092:9092"   # optional, for host debugging
+      - "9644:9644"   # admin API (optional)
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9644/v1/status/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    networks: [appnet]
+
+  redpanda-init:
+    image: redpandadata/redpanda:latest
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: >
+      bash -lc "
+        rpk cluster info --brokers redpanda:9092 >/dev/null 2>&1 || sleep 2;
+        rpk topic create trades --brokers redpanda:9092 || true
+      "
+    networks: [appnet]
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"   # optional
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    networks: [appnet]
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${MSSQL_SA_PASSWORD:?set in .env}
+    volumes:
+      - mssql-data:/var/opt/mssql
+    ports:
+      - "1433:1433"     # optional
+    networks: [mssqlnet]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc '</dev/tcp/127.0.0.1/1433' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+
+  tradedata:
+    build:
+      context: ./TradeData
+      dockerfile: Dockerfile
+    environment:
+      - KAFKA_BOOTSTRAP=redpanda:9092
+      - KAFKA_TOPIC=trades
+    ports:
+      - "8001:8001"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_started
+    networks: [appnet]
+
+  kafkaconsumer:
+    build:
+      context: ./kafkaconsumer
+    environment:
+      - KAFKA_BOOTSTRAP=redpanda:9092
+      - KAFKA_TOPIC=trades
+      - KAFKA_GROUP=trade-consumer-A
+      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_DB=trade_store
+      - MONGO_COLL=trades
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_started
+      mongo:
+        condition: service_healthy
+    networks: [appnet]
+
+  kafkaconsumermssql:
+    build:
+      context: ./KafkaConsumerMSSql
+    environment:
+      - KAFKA_BOOTSTRAP=redpanda:9092
+      - KAFKA_TOPIC=trades
+      - KAFKA_GROUP=trade-consumer-B
+      - MSSQL_HOST=mssql
+      - MSSQL_PORT=1433
+      - MSSQL_DB=master 
+      - MSSQL_USER=sa
+      - MSSQL_PASSWORD=${MSSQL_SA_PASSWORD:?set in .env}
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_started
+      mssql:
+        condition: service_started
+    networks:
+      appnet: {}     # to reach Kafka at redpanda:9092
+      mssqlnet: {}   # to reach SQL Server at mssql:1433
+
+  inputfeed:
+    profiles: ["dev"]
+    build:
+      context: ./InputFeed/DataFeed
+    environment:
+      DATA_PATH: /rawData/TradeData.csv          # your code reads this
+      API_URL: http://tradedata:8001/trades
+    volumes:
+      - ./InputFeed/rawData:/app/rawData:ro              # mounts host ./rawData in container
+    networks: [appnet]
