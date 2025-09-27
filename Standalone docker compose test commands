@@ -1,5 +1,6 @@
-docker compose --profile test up --build tradedata-tests kafkaconsumer-tests ingestsql-tests   --abort-on-container-exit
+docker compose --profile test up --build tradedata-tests kafkaconsumer-tests ingestsql-tests   --abort-on-container-exit  -- UT testing 
 
+####single command 
 docker build --target test -t tradedata:test .
 docker run --rm tradedata:test
 
@@ -8,3 +9,35 @@ docker run --rm kafkaconsumer:test
 
 docker build -f Dockerfile --target test -t kafkaconsumermssql:test .
 docker run --rm kafkaconsumermssql:test 
+
+
+
+
+####remove all
+docker compose down
+docker compose down -v
+docker compose down --remove-orphans
+docker rm -f tradestore-inputfeed-it-1
+docker container prune
+
+
+docker compose --profile test up --build --exit-code-from tradedata-tests tradedata-tests
+# then explicitly clean:
+docker compose rm -fsv
+
+
+
+Integration 2-step 
+# 1) bring up infra + app
+docker compose up -d redpanda redpanda-init tradedata -- prefer compose -d (all one and not these 3)
+
+# 2) run the feed once, capture exit code (non-zero if your script reports failures) -- integration 
+docker compose run --rm inputfeed-it
+
+# 3) optionally tear down
+docker compose down
+
+
+###regression
+docker compose --profile regression up --build --exit-code-from regression-runner regression-runner
+
