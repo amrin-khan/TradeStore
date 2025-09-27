@@ -1,3 +1,5 @@
+docker compose --profile test up --build tradedata-tests kafkaconsumer-tests ingestsql-tests   --abort-on-container-exit
+
 docker build --target test -t tradedata:test .
 docker run --rm tradedata:test
 
