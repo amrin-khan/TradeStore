@@ -1,0 +1,8 @@
+docker build --target test -t tradedata:test .
+docker run --rm tradedata:test
+
+docker build --target test -t kafkaconsumer:test .
+docker run --rm kafkaconsumer:test
+
+docker build -f Dockerfile --target test -t kafkaconsumermssql:test .
+docker run --rm kafkaconsumermssql:test 
