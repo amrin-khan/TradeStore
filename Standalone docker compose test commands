@@ -39,5 +39,10 @@ docker compose down
 
 
 ###regression
+# rebuild the image so the updated conftest.py is copied in
+docker build -f tests/RegressionRunner.Dockerfile -t tradestore/regression:latest .
+
+# run via compose
 docker compose --profile regression up --build --exit-code-from regression-runner regression-runner
+
 
