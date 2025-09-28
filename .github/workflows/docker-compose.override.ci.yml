@@ -1,0 +1,10 @@
+services:
+  tradedata:
+    build:
+      context: ./TradeData
+  # kafkaconsumer:
+  #   build:
+  #     context: ./kafkaconsumer
+  kafkaconsumermssql:
+    build:
+      context: ./KafkaConsumerMSSQL   # exact folder name, case-sensitive

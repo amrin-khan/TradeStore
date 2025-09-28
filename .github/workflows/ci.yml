@@ -59,12 +59,18 @@ jobs:
         run: pip-audit -r TradeData/requirements.txt --strict
 
       # ---- Build service images ----
-      - name: Compose build
-        run: |
-          docker compose build \
-            tradedata \
-            kafkaconsumer \
-            kafkaconsumermssql
+      - name: Compose build (use override)
+        env:
+          DROP_TABLE: "false"
+        run: docker compose -f docker-compose.yml -f docker-compose.override.ci.yml build
+
+      - name: Compose up core infra
+        env:
+          DROP_TABLE: "false"
+        run: docker compose -f docker-compose.yml -f docker-compose.override.ci.yml up -d redpanda mongo mssql
+
+      - name: Start application services
+        run: docker compose -f docker-compose.yml -f docker-compose.override.ci.yml up -d tradedata kafkaconsumer kafkaconsumermssql
 
       - name: Push images (optional)
         run: |
