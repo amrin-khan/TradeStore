@@ -1,0 +1,21 @@
+@startuml
+title TradeStore - Component Overview
+
+rectangle "Client" as Client
+package "TradeStore" {
+  [TradeData API] as API
+  queue "Kafka (Redpanda)\nTopic: trades" as Kafka
+  [KafkaConsumer (Mongo)] as KC_Mongo
+  [KafkaConsumerMSSQL] as KC_SQL
+  database "MongoDB\nDB: trade_store\nColl: trades" as Mongo
+  database "SQL Server\nDB: master\nTable: dbo.trades" as MSSQL
+}
+
+Client --> API : POST /trades\n(JSON)
+API --> Kafka : Produce trade event
+Kafka --> KC_Mongo : Consume trade
+Kafka --> KC_SQL : Consume trade
+KC_Mongo --> Mongo : Upsert trade
+KC_SQL --> MSSQL : INSERT (PK: trade_id,version,book_id)
+
+@enduml

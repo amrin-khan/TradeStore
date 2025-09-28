@@ -1,0 +1,1 @@
+00 00 * * * /opt/mssql-tools/bin/sqlcmd -S mssql,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -b -Q "UPDATE dbo.trades SET expired=1 WHERE maturity_date < CONVERT(date, GETDATE()) AND expired=0;" >> /var/log/cron.log 2>&1

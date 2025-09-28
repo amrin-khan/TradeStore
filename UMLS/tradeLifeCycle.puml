@@ -1,0 +1,17 @@
+@startuml
+title Trade State Machine
+
+[*] --> Received
+Received --> Validated : schema OK\nbusiness rules pass
+Received --> Rejected  : invalid payload
+
+Validated --> Published : send to Kafka
+Published --> PersistedMongo : consumed by KC (Mongo)
+Published --> PersistedMSSQL : consumed by KC (MSSQL)
+
+PersistedMongo --> Completed : when MSSQL persisted
+PersistedMSSQL --> Completed : when Mongo persisted
+
+Rejected --> [*]
+Completed --> [*]
+@enduml

@@ -1,0 +1,5 @@
+# App runtime
+fastapi
+uvicorn[standard]
+aiokafka
+httpx

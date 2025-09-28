@@ -1,0 +1,29 @@
+@startuml
+title Trade Ingestion E2E
+
+actor User
+participant "TradeData API" as API
+queue "Kafka: trades" as Kafka
+participant "KafkaConsumer (Mongo)" as KC_Mongo
+participant "KafkaConsumerMSSQL" as KC_SQL
+database "MongoDB" as Mongo
+database "MSSQL" as MSSQL
+
+User -> API: POST /trades {trade_id,version,book_id,...}
+API -> API: Validate payload\n(schema, dates, expired flag)
+API -> Kafka: produce(key=trade_id:version:book_id, value=trade)
+activate Kafka
+Kafka --> KC_Mongo: poll(record)
+Kafka --> KC_SQL: poll(record)
+deactivate Kafka
+
+activate KC_Mongo
+KC_Mongo -> Mongo: upsert(trade_id, version, book_id, ...)
+deactivate KC_Mongo
+
+activate KC_SQL
+KC_SQL -> MSSQL: INSERT ...\n(on PK conflict: ignore/handle)
+deactivate KC_SQL
+
+API --> User: 201 Created / 200 OK
+@enduml

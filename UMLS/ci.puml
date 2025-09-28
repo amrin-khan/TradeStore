@@ -1,0 +1,19 @@
+@startuml
+title CI Pipeline (GitHub Actions)
+
+start
+:Checkout;
+:Setup Python / pip-audit;
+:Security - pip-audit (strict);
+:Build images / Compose build;
+:Bring up infra (Redpanda,Mongo,MSSQL);
+:Start services (tradedata, consumers);
+if (Run integration tests?) then (yes)
+  :pytest integration;
+else (no)
+endif
+:Trivy scan images (HIGH,CRITICAL);
+:Upload logs artifact;
+:Compose down -v;
+stop
+@enduml
