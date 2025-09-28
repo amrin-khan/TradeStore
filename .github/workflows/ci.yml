@@ -38,22 +38,21 @@ jobs:
           echo ".env created"
 
       # ---- (Optional) Python toolchain only for dependency scans ----
-      - name: Set up Python for Safety
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
-      - name: Install safety (latest)
+      - name: Install Safety v3
         run: |
           python -m pip install --upgrade pip
           pip install "safety>=3.0.0,<4"
-          safety --version
+          safety --version   # confirm version in logs
 
-      # ---- Dependency (requirements.txt) scans — fail on High/Critical ----
       - name: Safety scan - TradeData
         if: hashFiles('TradeData/requirements.txt') != ''
-        run: safety check --full-report --severity high --exit-code 1 -r TradeData/requirements.txt || exit 1
+        run: safety check --full-report --severity high --exit-code 1 -r TradeData/requirements.txt
+
 
       - name: Safety scan - KafkaConsumer (Mongo)
         if: hashFiles('kafkaconsumer/requirements.txt') != ''
