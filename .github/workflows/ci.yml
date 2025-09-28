@@ -51,34 +51,47 @@ jobs:
           python -m pip install --no-cache-dir "safety>=3.0.0,<4"
           python -m safety --version
 
-      # Dependency scans — use python -m safety (not the 'safety' shim)
-      - name: Safety scan - TradeData
-        if: hashFiles('TradeData/requirements.txt') != ''
+      - name: Write Safety v3 policy
         run: |
-          python -m safety check --full-report --severity high --exit-code 1 -r TradeData/requirements.txt
+          cat > .safety-policy.yml <<'YAML'
+          version: '3.0'
 
-      - name: Safety scan - KafkaConsumer (Mongo)
-        if: hashFiles('kafkaconsumer/requirements.txt') != ''
-        run: |
-          python -m safety check --full-report --severity high --exit-code 1 -r kafkaconsumer/requirements.txt
+          scanning-settings:
+            # Ensure these requirement files are scanned
+            include-files:
+              - path: TradeData/requirements.txt
+                file-type: requirements.txt
+              - path: kafkaconsumer/requirements.txt
+                file-type: requirements.txt
+              - path: KafkaConsumerMSSql/requirements.txt
+                file-type: requirements.txt
 
-      - name: Safety scan - KafkaConsumerMSSql
-        if: hashFiles('KafkaConsumerMSSql/requirements.txt') != ''
-        run: |
-          python -m safety check --full-report --severity high --exit-code 1 -r KafkaConsumerMSSql/requirements.txt
+          report:
+            dependency-vulnerabilities:
+              # Hide low/medium from the report if you want a cleaner console
+              auto-ignore-in-report:
+                cvss-severity: [low, medium]
 
-      # ---- Build service images from your compose contexts ----
-      - name: Build images
-        run: |
-          docker build -t $IMAGE_PREFIX-tradedata TradeData
-          docker build -t $IMAGE_PREFIX-kc-mongo kafkaconsumer
-          docker build -t $IMAGE_PREFIX-kc-mssql KafkaConsumerMSSql
+          fail-scan-with-exit-code:
+            dependency-vulnerabilities:
+              enabled: true
+              # Fail CI when High or Critical are found
+              fail-on-any-of:
+                cvss-severity: [high, critical]
+          YAML
 
-      - name: Push images (optional)
-        run: |
-          docker push $IMAGE_PREFIX-tradedata
-          docker push $IMAGE_PREFIX-kc-mongo
-          docker push $IMAGE_PREFIX-kc-mssql
+            # ---- Build service images from your compose contexts ----
+            - name: Build images
+              run: |
+                docker build -t $IMAGE_PREFIX-tradedata TradeData
+                docker build -t $IMAGE_PREFIX-kc-mongo kafkaconsumer
+                docker build -t $IMAGE_PREFIX-kc-mssql KafkaConsumerMSSql
+
+            - name: Push images (optional)
+              run: |
+                docker push $IMAGE_PREFIX-tradedata
+                docker push $IMAGE_PREFIX-kc-mongo
+                docker push $IMAGE_PREFIX-kc-mssql
 
       # ---- Bring up infra + apps from your docker-compose.yml ----
       - name: Compose up core infra (Kafka, Mongo, MSSQL)
