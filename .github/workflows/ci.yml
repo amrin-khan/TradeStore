@@ -16,7 +16,7 @@ env:
   COMPOSE_FILE: docker-compose.yml
   # Build a tag prefix using owner/repo + sha, then a lowercase version for Docker
   IMAGE_PREFIX: ${{ format('ghcr.io/{0}:{1}', github.repository, github.sha) }}
-  IMAGE_PREFIX_LC: ${{ toLower(format('ghcr.io/{0}:{1}', github.repository, github.sha)) }}
+  IMAGE_PREFIX_LC: ${{ lower(format('ghcr.io/{0}:{1}', github.repository, github.sha)) }}
 
 jobs:
   ci:
