@@ -57,22 +57,22 @@ jobs:
           cat > .safety-policy.yml <<'YAML'
         version: '3.0'
         scanning-settings:
-          include-files:
-            - path: TradeData/requirements.txt
-              file-type: requirements.txt
-            - path: kafkaconsumer/requirements.txt
-              file-type: requirements.txt
-            - path: KafkaConsumerMSSql/requirements.txt
-              file-type: requirements.txt
+        include-files:
+          - path: TradeData/requirements.txt
+            file-type: requirements.txt
+          - path: kafkaconsumer/requirements.txt
+            file-type: requirements.txt
+          - path: KafkaConsumerMSSql/requirements.txt
+            file-type: requirements.txt
         report:
-          dependency-vulnerabilities:
-            auto-ignore-in-report:
-              cvss-severity: [low, medium]
+        dependency-vulnerabilities:
+          auto-ignore-in-report:
+            cvss-severity: [low, medium]
         fail-scan-with-exit-code:
-          dependency-vulnerabilities:
-            enabled: true
-            fail-on-any-of:
-              cvss-severity: [high, critical]
+        dependency-vulnerabilities:
+          enabled: true
+          fail-on-any-of:
+            cvss-severity: [high, critical]
         YAML
 
       - name: Safety scan (policy-driven)
