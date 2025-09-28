@@ -10,13 +10,13 @@ from contextlib import asynccontextmanager
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "127.0.0.1:9092")
 TOPIC = os.getenv("KAFKA_TOPIC", "trades")
 
-# Define the schema for trade data
+# Schema for trade data
 class Trade(BaseModel):
     trade_id: str
     version: str
     counterparty_id: str
     book_id: str
-    maturity_date: str   # could also parse into date
+    maturity_date: str   # could be date, but keeping str for simplicity
     created_date: str
     expired: str
 
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# In-memory store (demo)
+# In-memory store
 trade_store: list[dict] = []
 
 @app.post("/trades", status_code=202)
@@ -67,9 +67,9 @@ async def receive_and_publish(trade: Trade):
     # for k in ("maturity_date", "created_date"):
     #     payload[k] = datetime.strptime(payload[k], "%d/%m/%Y").date().isoformat()
 
-    # 3) "store" locally (demo)
+    # 3) "store" locally
     trade_store.append(payload)
-    print("amrin")
+
 
     # 4) publish to Kafka
     if producer is None:
@@ -82,8 +82,6 @@ async def receive_and_publish(trade: Trade):
             ("content-type", b"application/json"),
             ("schema", b"trade_event_v1"),
         ]
-        # quick sanity asserts (remove later)
-        assert all(isinstance(k, str) and (v is None or isinstance(v, (bytes, bytearray))) for k, v in headers)
         metadata = await producer.send_and_wait(
             topic=TOPIC,
             value=payload,
@@ -96,32 +94,16 @@ async def receive_and_publish(trade: Trade):
         # Decide policy: return 503 or 207 (multi-status) or accept but flag failure
         raise HTTPException(503, f"Kafka publish failed: {e}")
 
-    # 5) return normal HTTP response with Kafka metadata
     return {
         "status": "received_and_published",
         "stored_count": len(trade_store),
         "kafka": {"topic": metadata.topic, "partition": metadata.partition, "offset": metadata.offset},
     }
 
-# @app.post("/publish", status_code=202)
-# async def publish(event: Trade):
-#     if producer is None:
-#         raise HTTPException(503, "Producer not ready")
-#     # normalize expired to bool
-#     if isinstance(event.expired, str):
-#         event.expired = event.expired.strip().upper() in {"Y", "YES", "TRUE", "1"}
-#     md = await producer.send_and_wait(
-#         TOPIC,
-#         value=event.model_dump(by_alias=True),
-#         key=key_for(event),
-#         headers=[(b"content-type", b"application/json"), (b"schema", b"trade_event_v1")],
-#     )
-#     return {"topic": md.topic, "partition": md.partition, "offset": md.offset}
-
 @app.get("/trades")
 async def get_trades():
     """
-    Retrieve all stored trades (for testing).
+    Retrieve all stored trades.
     """
     return trade_store
 

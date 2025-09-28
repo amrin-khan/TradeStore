@@ -1,0 +1,34 @@
+@startuml
+title Deployment (Docker Compose)
+
+node "Host (Runner/Dev Machine)" {
+  frame "Docker" {
+    node "Network: trade-net" as net1
+    node "Network: mssql-net" as net2
+
+    node "redpanda:9092" as Redpanda
+    node "mongo:27017" as Mongo
+    node "mssql:1433" as MSSQL
+
+    node "tradedata:8001" as TradeData
+    node "kafkaconsumer" as KC_Mongo
+    node "kafkaconsumermssql" as KC_SQL
+
+    Redpanda -- TradeData : bootstrap=redpanda:9092
+    Redpanda -- KC_Mongo
+    Redpanda -- KC_SQL
+
+    KC_Mongo -- Mongo
+    KC_SQL -- MSSQL
+
+    TradeData .. net1
+    KC_Mongo .. net1
+    Redpanda .. net1
+    Mongo .. net1
+
+    KC_SQL .. net1
+    KC_SQL .. net2
+    MSSQL .. net2
+  }
+}
+@enduml

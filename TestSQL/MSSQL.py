@@ -76,7 +76,7 @@ print(cursor.fetchall())
 
 
 
-##### -- update expired flag starts
+# #### -- update expired flag starts
 # cursor.execute("""
 # update dbo.trades
 # set expired = 1
@@ -84,7 +84,7 @@ print(cursor.fetchall())
 # """)
 # conn.commit()
 # print("Table ensured")
-##### -- update expired flag starts
+# #### -- update expired flag starts
 
 #######delete table
 

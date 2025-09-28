@@ -1,0 +1,19 @@
+@startuml
+title Consumer Retry to MSSQL
+
+participant "KafkaConsumerMSSQL" as C
+database "MSSQL" as DB
+
+C -> DB: INSERT trade
+alt success
+  C -> C: ack & commit offset
+else transient error
+  C -> C: backoff (exp/jitter)
+  C -> DB: retry INSERT (N times)
+  alt success
+    C -> C: ack & commit
+  else give up
+    C -> C: send to DLQ / log error
+  end
+end
+@enduml

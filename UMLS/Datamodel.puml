@@ -1,0 +1,35 @@
+@startuml
+title Trade Domain Model
+
+class Trade {
+  +trade_id: string
+  +counterparty_id: string
+  +book_id: string
+  +version: int
+  +maturity_date: date
+  +created_date: date
+  +expired: bool
+}
+
+class MongoTrade <<document>> {
+  _id: ObjectId
+  trade_id: string
+  version: int
+  book_id: string
+  ... (same fields)
+}
+
+class SqlTrade <<table dbo.trades>> {
+  trade_id: varchar(50) <<PK>>
+  version: int <<PK>>
+  book_id: varchar(50) <<PK>>
+  counterparty_id: varchar(50)
+  maturity_date: date
+  created_date: date
+  expired: bit
+}
+
+Trade -> MongoTrade : mapped to document
+Trade -> SqlTrade : mapped to row
+
+@enduml
