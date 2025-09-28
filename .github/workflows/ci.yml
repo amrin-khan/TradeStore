@@ -44,26 +44,24 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install Safety
+      - name: Install safety (latest)
         run: |
           python -m pip install --upgrade pip
-          pip install safety
+          pip install "safety>=3.0.0,<4"
+          safety --version
 
       # ---- Dependency (requirements.txt) scans — fail on High/Critical ----
       - name: Safety scan - TradeData
         if: hashFiles('TradeData/requirements.txt') != ''
-        run: |
-          safety check --full-report --severity high --exit-code 1 -r TradeData/requirements.txt || exit 1
+        run: safety check --full-report --severity high --exit-code 1 -r TradeData/requirements.txt || exit 1
 
       - name: Safety scan - KafkaConsumer (Mongo)
         if: hashFiles('kafkaconsumer/requirements.txt') != ''
-        run: |
-          safety check --full-report --severity high --exit-code 1 -r kafkaconsumer/requirements.txt || exit 1
+        run: safety check --full-report --severity high --exit-code 1 -r kafkaconsumer/requirements.txt || exit 1
 
       - name: Safety scan - KafkaConsumerMSSql
         if: hashFiles('KafkaConsumerMSSql/requirements.txt') != ''
-        run: |
-          safety check --full-report --severity high --exit-code 1 -r KafkaConsumerMSSql/requirements.txt || exit 1
+        run: safety check --full-report --severity high --exit-code 1 -r KafkaConsumerMSSql/requirements.txt || exit 1
 
       # ---- Build service images from your compose contexts ----
       - name: Build images
