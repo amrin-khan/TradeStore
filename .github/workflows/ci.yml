@@ -16,7 +16,7 @@ env:
   COMPOSE_FILE: docker-compose.yml
   # Build a tag prefix using owner/repo + sha, then a lowercase version for Docker
   IMAGE_PREFIX: ${{ format('ghcr.io/{0}:{1}', github.repository, github.sha) }}
-  IMAGE_PREFIX_LC: ${{ lower(format('ghcr.io/{0}:{1}', github.repository, github.sha)) }}
+  # IMAGE_PREFIX_LC: ${{ lower(format('ghcr.io/{0}:{1}', github.repository, github.sha)) }}
 
 jobs:
   ci:
@@ -26,6 +26,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Compute lowercase IMAGE_PREFIX_LC
+        run: |
+          echo "IMAGE_PREFIX_LC=$(echo ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_SHA} | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
