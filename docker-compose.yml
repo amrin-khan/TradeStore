@@ -178,6 +178,7 @@ services:
       mssqlnet: {}   # to reach SQL Server at mssql:1433
 
   expiry-cron:
+    profiles: ["ops"]
     build:
       context: .
       dockerfile: MarkExpired/ExpiryCron.Dockerfile

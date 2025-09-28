@@ -167,4 +167,6 @@ jobs:
 
       - name: Tear down
         if: always()
+        env:
+          MSSQL_SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
         run: docker compose down -v
