@@ -165,9 +165,11 @@ jobs:
           name: compose-logs
           path: compose-logs.txt
 
-      - name: Tear down
+      - name: Tear down (always)
         if: always()
         env:
           MSSQL_SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
-          DROP_TABLE: "false"           # silence the warning
-        run: docker compose down -v
+          DROP_TABLE: "false"
+        run: |
+          [ -f .env ] || { echo "MSSQL_SA_PASSWORD=$MSSQL_SA_PASSWORD" > .env; echo "DROP_TABLE=$DROP_TABLE" >> .env; }
+          docker compose --env-file .env down -v
