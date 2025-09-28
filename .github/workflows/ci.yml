@@ -4,17 +4,19 @@ on:
   push:
     branches:
       - main
-      - 'feature/wip'    
+      - 'feature/wip'
   pull_request:
 
 permissions:
   contents: read
   packages: write
-  # security-events: write   # only needed if you upload SARIF
+  # security-events: write
 
 env:
   COMPOSE_FILE: docker-compose.yml
-  IMAGE_PREFIX: ghcr.io/${{ github.repository }}:${{ github.sha }}
+  # Build a tag prefix using owner/repo + sha, then a lowercase version for Docker
+  IMAGE_PREFIX: ${{ format('ghcr.io/{0}:{1}', github.repository, github.sha) }}
+  IMAGE_PREFIX_LC: ${{ toLower(format('ghcr.io/{0}:{1}', github.repository, github.sha)) }}
 
 jobs:
   ci:
@@ -37,19 +39,12 @@ jobs:
           echo "MSSQL_SA_PASSWORD=${{ secrets.MSSQL_SA_PASSWORD }}" > .env
           echo ".env created"
 
-      # ---- Python toolchain + Safety v3 ----
-      - name: Set up Python for Safety
+      # ---- Python toolchain + pip-audit ----
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
-
-      # - name: Install Safety v3 and verify
-      #   run: |
-      #     python -m pip install --upgrade pip
-      #     python -m pip uninstall -y safety || true
-      #     python -m pip install --no-cache-dir "safety>=3.0.0,<4"
-      #     python -m safety --version
 
       - name: Install pip-audit
         run: python -m pip install --upgrade pip-audit
@@ -58,7 +53,7 @@ jobs:
         if: hashFiles('TradeData/requirements.txt') != ''
         run: pip-audit -r TradeData/requirements.txt --strict
 
-      # ---- Build service images ----
+      # ---- Compose build/up using your override file ----
       - name: Compose build (use override)
         env:
           DROP_TABLE: "false"
@@ -72,14 +67,23 @@ jobs:
       - name: Start application services
         run: docker compose -f docker-compose.yml -f docker-compose.override.ci.yml up -d tradedata kafkaconsumer kafkaconsumermssql
 
+      # ---- (Optional) Build/tag explicit images for push & Trivy ----
+      # If you want to push & scan images by a known tag, build them explicitly:
+      - name: Build images (explicit tags for push/scan)
+        run: |
+          docker build -t "${{ env.IMAGE_PREFIX_LC }}-tradedata"       TradeData
+          docker build -t "${{ env.IMAGE_PREFIX_LC }}-kafkaconsumer"   kafkaconsumer
+          docker build -t "${{ env.IMAGE_PREFIX_LC }}-kafkaconsumermssql" KafkaConsumerMSSQL
+
+      # ---- Push images (optional) ----
       - name: Push images (optional)
         run: |
-          docker push $IMAGE_PREFIX-tradedata
-          docker push $IMAGE_PREFIX-kafkaconsumer
-          docker push $IMAGE_PREFIX-kafkaconsumermssql
+          docker push "${{ env.IMAGE_PREFIX_LC }}-tradedata"
+          docker push "${{ env.IMAGE_PREFIX_LC }}-kafkaconsumer"
+          docker push "${{ env.IMAGE_PREFIX_LC }}-kafkaconsumermssql"
 
-      # ---- Bring up infra + apps ----
-      - name: Compose up core infra (Kafka, Mongo, MSSQL)
+      # ---- (If you also bring up via base compose again, keep this block; otherwise remove) ----
+      - name: Compose up core infra (Kafka, Mongo, MSSQL) [base]
         run: |
           docker compose up -d redpanda mongo mssql
           echo "Waiting for health..."
@@ -96,17 +100,17 @@ jobs:
       - name: Init Kafka topic (redpanda-init)
         run: docker compose up --no-deps --wait redpanda-init || true
 
-      - name: Start application services (without dev profile)
+      - name: Start application services (without dev profile) [base]
         run: |
           docker compose up -d tradedata kafkaconsumer kafkaconsumermssql
           sleep 5
           docker compose ps
-      
-      # ---- Image scans (fail on HIGH/CRITICAL) ----
+
+      # ---- Trivy scans (use lowercase tag) ----
       - name: Trivy scan - TradeData
         uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-tradedata
+          image-ref: ${{ env.IMAGE_PREFIX_LC }}-tradedata
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
@@ -116,7 +120,7 @@ jobs:
       - name: Trivy scan - KafkaConsumer (Mongo)
         uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-kafkaconsumer
+          image-ref: ${{ env.IMAGE_PREFIX_LC }}-kafkaconsumer
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
@@ -126,7 +130,7 @@ jobs:
       - name: Trivy scan - KafkaConsumerMSSQL
         uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-kafkaconsumermssql
+          image-ref: ${{ env.IMAGE_PREFIX_LC }}-kafkaconsumermssql
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
