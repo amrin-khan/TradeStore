@@ -46,3 +46,17 @@ docker build -f tests/RegressionRunner.Dockerfile -t tradestore/regression:lates
 docker compose --profile regression up --build --exit-code-from regression-runner regression-runner
 
 
+Create/update .env in the repo root (Compose auto-loads it):
+echo 'MSSQL_SA_PASSWORD=Str0ng!Passw0rd' >> .env
+
+docker compose build expiry-cron
+# if SQL is not built/pulled yet:
+docker compose pull mssql || true
+docker compose up -d expiry-cron or docker compose up -d mssql mssql-init expiry-cron
+
+
+//Manual 
+docker compose run --rm   -e MSSQL_SA_PASSWORD='Str0ng!Passw0rd'  expiry-cron   bash -lc '/opt/mssql-tools/bin/sqlcmd -S mssql,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -b -Q "UPDATE dbo.trades SET expired=1 WHERE maturity_date < CONVERT(date, GETDATE()) AND expired=0;"'
+
+
+
