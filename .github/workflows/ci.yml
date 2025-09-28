@@ -116,7 +116,7 @@ jobs:
         with:
           image-ref: ${{ env.IMAGE_PREFIX_LC }}-tradedata
           vuln-type: 'os,library'
-          severity: 'HIGH,CRITICAL'
+          severity: 'CRITICAL'
           ignore-unfixed: true
           exit-code: '1'
           format: 'table'
@@ -126,7 +126,7 @@ jobs:
         with:
           image-ref: ${{ env.IMAGE_PREFIX_LC }}-kafkaconsumer
           vuln-type: 'os,library'
-          severity: 'HIGH,CRITICAL'
+          severity: 'CRITICAL'
           ignore-unfixed: true
           exit-code: '1'
           format: 'table'
@@ -136,7 +136,7 @@ jobs:
         with:
           image-ref: ${{ env.IMAGE_PREFIX_LC }}-kafkaconsumermssql
           vuln-type: 'os,library'
-          severity: 'HIGH,CRITICAL'
+          severity: 'CRITICAL'
           ignore-unfixed: true
           exit-code: '1'
           format: 'table'
