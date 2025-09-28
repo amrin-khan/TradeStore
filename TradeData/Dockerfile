@@ -1,7 +1,13 @@
 # TradeData/Dockerfile
-FROM python:3.11-slim
+# syntax=docker/dockerfile:1.7
 
-# Basic env + faster pip
+ARG PYTHON_VERSION=3.11-slim
+
+# ------------------------------
+# Base image (shared settings)
+# ------------------------------
+FROM python:${PYTHON_VERSION} AS base
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -16,14 +22,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 RUN useradd -ms /bin/bash appuser
 WORKDIR /app
 
-# Install deps
-# - fastapi (includes pydantic)
-# - uvicorn[standard] (uvloop, httptools, etc.)
-# - aiokafka (pure Python; no librdkafka needed)
-RUN pip install --upgrade pip \
- && pip install "fastapi>=0.110" "uvicorn[standard]>=0.29" "aiokafka>=0.10"
+# ------------------------------
+# Test stage (dev deps + tests)
+# ------------------------------
+FROM base AS test
 
-# Copy app code
+# Install runtime + dev/test deps
+COPY requirements.txt requirements-dev.txt /app/
+RUN python -m pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+
+# Copy all sources (so tests can import your app)
+# If your tests live in tests/, ensure it’s included.
+COPY . /app
+
+# Permissions
+RUN chown -R appuser:appuser /app
+USER appuser
+
+# Default command for this stage: run test suite
+CMD ["pytest", "-vv", "--cov=.", "--cov-report=term-missing"]
+
+# ------------------------------
+# Runtime stage (lean, prod)
+# ------------------------------
+FROM base AS runtime
+
+# Install only runtime deps
+COPY requirements.txt /app/requirements.txt
+RUN python -m pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy just what you need to run the app (keeps image small)
 COPY main.py /app/main.py
 
 # Permissions
@@ -39,4 +69,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # Run server
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
-

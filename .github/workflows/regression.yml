@@ -1,0 +1,139 @@
+# .github/workflows/regression.yml
+name: Regression
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: "0 2 * * *"     # nightly 02:00 UTC
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      COMPOSE_PROJECT_NAME: tradestore
+      COMPOSE_PROFILES: regression
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Optional: Free up some disk space on GitHub runners (helps big images)
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc || true
+          docker system prune -af || true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Set up Docker layer cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      # Create .env for docker compose (read by your compose file)
+      - name: Write .env for compose
+        run: |
+          cat > .env <<EOF
+          MSSQL_SA_PASSWORD=${{ secrets.MSSQL_SA_PASSWORD }}
+          # you can add other overrides here if needed
+          EOF
+
+      # Build regression runner image (kept separate from compose images)
+      - name: Build regression runner image
+        run: |
+          docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --cache-from=type=local,src=/tmp/.buildx-cache \
+            --cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            -f tests/RegressionRunner.Dockerfile \
+            -t tradestore/regression:latest \
+            .
+
+      # Build & start infra + apps via compose
+      - name: Compose up (infra + apps)
+        run: |
+          docker compose --profile regression up -d --build \
+            redpanda redpanda-init mongo mssql mssql-init \
+            tradedata kafkaconsumer kafkaconsumermssql
+
+      # (Swap caches after build to keep them small)
+      - name: Move build cache
+        if: always()
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
+
+      # Quick visibility into what’s running
+      - name: Show container state
+        run: |
+          docker ps -a
+          echo
+          docker compose ps
+          echo
+          docker compose ls
+
+      # Wait for API health + check health statuses to avoid race conditions
+      - name: Wait for services to be healthy
+        run: |
+          set -e
+          # wait for healthchecks to pass
+          for i in {1..60}; do
+            unhealthy=$(docker compose ps --format json | jq -r '.[] | select(.Health!="healthy") | .Name' | xargs)
+            [ -z "$unhealthy" ] && break
+            echo "Waiting for healthy containers... not healthy: $unhealthy"
+            sleep 2
+          done
+
+          # ping API health endpoint
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8001/health >/dev/null 2>&1; then
+              echo "tradedata healthy"
+              break
+            fi
+            echo "Waiting for tradedata health..."
+            sleep 2
+          done
+
+          # optional: check Redpanda topic exists
+          docker compose exec -T redpanda rpk topic list --brokers redpanda:9092 || true
+
+      - name: Run regression suite
+        run: |
+          # Use --rm so the ephemeral regression-runner is removed afterwards
+          docker compose --profile regression run --rm regression-runner
+
+      # Always collect logs; they’re invaluable even when green
+      - name: Compose logs
+        if: always()
+        run: |
+          docker compose logs --no-color > compose.log || true
+
+      - name: Upload compose logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-logs
+          path: compose.log
+
+      # If your regression runner writes junit/coverage, upload them too
+      - name: Upload regression artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-artifacts
+          path: |
+            tests/.pytest_cache
+            tests/junit.xml
+            tests/coverage.xml
+          if-no-files-found: ignore
+
+      # Tear everything down (including volumes) to keep the runner clean
+      - name: Tear down
+        if: always()
+        run: docker compose down -v --remove-orphans

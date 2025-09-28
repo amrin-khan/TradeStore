@@ -1,7 +1,7 @@
 # kafkaconsumer.py
 import os
 import asyncio
-import contextlib
+from contextlib import suppress
 import json
 import signal
 import uuid
@@ -11,14 +11,15 @@ from datetime import datetime
 from aiokafka import AIOKafkaConsumer
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import InsertOne
-from pymongo.errors import BulkWriteError
+from contextlib import suppress
+from pymongo.errors import BulkWriteError, ServerSelectionTimeoutError
 
 # ------------ Config ------------
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "redpanda:9092")
 KAFKA_TOPIC     = os.getenv("KAFKA_TOPIC", "trades")
 KAFKA_GROUP     = os.getenv("KAFKA_GROUP", "trade-consumer-A")
 
-MONGO_URI  = os.getenv("MONGO_URI", "mongodb://mongo::27017")
+MONGO_URI  = os.getenv("MONGO_URI", "mongodb://mongo:27017")
 MONGO_DB   = os.getenv("MONGO_DB", "trade_store")
 MONGO_COLL = os.getenv("MONGO_COLL", "trades")
 
@@ -52,8 +53,18 @@ def normalize(doc: Dict[str, Any]) -> Dict[str, Any]:
 
 # ---------- main consumer ----------
 async def consumer_task():
-    mcli = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-    await mcli.admin.command("ping")
+    mcli = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=3000, connectTimeoutMS=3000)
+    try:
+        # Time-bound the ping so it can be interrupted and tests can simulate failures
+        await asyncio.wait_for(mcli.admin.command("ping"), timeout=3.0)
+    except (asyncio.TimeoutError, ServerSelectionTimeoutError) as e:
+        print(f"[fatal] Mongo unreachable at {MONGO_URI}: {e}")
+        mcli.close()
+        return
+    except Exception as e:
+        print(f"[fatal] Mongo init failed: {type(e).__name__}: {e}")
+        mcli.close()
+        return
     coll = mcli[MONGO_DB][MONGO_COLL]
     print(f"teempm {mcli[MONGO_DB][MONGO_COLL]} {MONGO_DB} {MONGO_COLL} {MONGO_URI}")    
     consumer = AIOKafkaConsumer(
@@ -105,24 +116,28 @@ async def consumer_task():
 
             try:
                 for i in range(0, len(ops), BULK_CHUNK):
-                    print("amrin1" f"[mongo] writing chunk {i}-{min(i+BULK_CHUNK, len(ops))} of {len(ops)}")
-                    print(f"amrinnnnn4 {coll}")
-                    await coll.bulk_write(ops[i:i+BULK_CHUNK], ordered=False)
-                    await asyncio.sleep(0)  # let heartbeats run
-                await consumer.commit()
-                print(f"[ok] polled={polled} inserted={len(ops)} committed")
+                    batch = ops[i:i+BULK_CHUNK]
+                    # time-bound the DB write
+                    await asyncio.wait_for(coll.bulk_write(batch, ordered=False), timeout=5.0)
+                    await asyncio.sleep(0)
+                # time-bound the commit too
+                with suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(consumer.commit(), timeout=3.0)
+                print(f"[ok] polled={polled} inserted={len(ops)} committed (or timed out)")
             except BulkWriteError as bwe:
                 print(f"[mongo] BulkWriteError: {bwe.details}")
-                await consumer.commit()  # skip dupes
+                with suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(consumer.commit(), timeout=3.0)
             except Exception as e:
                 print(f"[err] mongo write failed: {type(e).__name__}: {e}")
-                await asyncio.sleep(1.0)  # retry later
-
+                await asyncio.sleep(0.2)
     finally:
         try:
             await asyncio.wait_for(consumer.stop(), timeout=5.0)
         except asyncio.TimeoutError:
             print("[warn] consumer.stop timeout")
+        mcli.close()
+        print("[done] consumer stopped; mongo closed")
         mcli.close()
         print("[done] consumer stopped; mongo closed")
 
@@ -152,5 +167,8 @@ async def main():
         with contextlib.suppress(asyncio.CancelledError):
             await task
 
-if __name__ == "__main__":
-    asyncio.run(main())
+if __name__ == "__main__":  # pragma: no cover
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:  # pragma: no cover
+        pass

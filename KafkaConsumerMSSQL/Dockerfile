@@ -1,12 +1,15 @@
-# consumer-mssql/Dockerfile
+# kafkaconsumermssql/Dockerfile
+# syntax=docker/dockerfile:1.7
 
-FROM python:3.11-slim
-ENV DEBIAN_FRONTEND=noninteractive
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
+########################
+# 1) Base (define this FIRST)
+########################
+FROM python:3.11-slim AS base
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
-
+    
 # --- System deps + MS ODBC 18 + tools (Debian 12/bookworm) ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
    curl gnupg2 apt-transport-https ca-certificates \
@@ -24,7 +27,30 @@ ENV PATH="/opt/mssql-tools18/bin:${PATH}"
 RUN useradd -ms /bin/bash appuser
 WORKDIR /app
 
-# --- Python deps (pin via requirements.txt for caching) ---
+
+#####################################
+# Test target (runs pytest)         #
+#####################################
+FROM base AS test
+
+# Python deps (runtime + test tools)
+COPY requirements.txt /app/requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r /app/requirements.txt && \
+    pip install --no-cache-dir pytest pytest-asyncio pytest-cov
+
+# App + tests
+COPY IngestSQL.py /app/IngestSQL.py
+# Make sure this file exists at build context root; rename if needed:
+COPY test_ingestsql.py /app/test_ingestsql.py
+
+# Run test suite with coverage
+CMD ["pytest", "-vv", "--cov=/app", "--cov-report=term-missing", "/app/test_ingestsql.py"]
+
+########################
+# 2) Runtime (your original)
+########################
+FROM base AS runtime
 COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && pip install -r /app/requirements.txt
 

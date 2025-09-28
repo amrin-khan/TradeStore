@@ -49,24 +49,30 @@ def build_session() -> requests.Session:
     s.mount("https://", HTTPAdapter(max_retries=retry))
     return s
 
+# in InputFeed script (post_json_rows)
 def post_json_rows(rows: Iterable[Dict[str, str]]) -> None:
     session = build_session()
     headers = {"Content-Type": "application/json", **EXTRA_HEADERS}
     if BEARER_TOKEN:
         headers["Authorization"] = f"Bearer {BEARER_TOKEN}"
 
+    failures = 0  # <--- add
     for i, row in enumerate(rows, start=1):
         try:
-            data=json.dumps(row)
+            data = json.dumps(row)
             resp = session.post(ENDPOINT, data=data, headers=headers, timeout=TIMEOUT_SECS)
-            print(data)
             if 200 <= resp.status_code < 300:
                 print(f"[OK] line {i}: {row.get('trade_id', '')}")
-                print(resp.text)
             else:
+                failures += 1
                 print(f"[ERR] line {i}: HTTP {resp.status_code} -> {resp.text[:200]}", file=sys.stderr)
         except requests.RequestException as e:
+            failures += 1
             print(f"[ERR] line {i}: {e}", file=sys.stderr)
+
+    if failures:
+        print(f"[FAIL] {failures} errors during ingest", file=sys.stderr)
+        sys.exit(1)  # <--- make the container exit non-zero when anything fails
 
 if __name__ == "__main__":
     try:

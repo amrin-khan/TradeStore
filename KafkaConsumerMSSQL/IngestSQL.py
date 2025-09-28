@@ -63,36 +63,70 @@ async def insert_record(record):
                 log.warning("Invalid existing version in DB: %r", row[0])
                 existing_version = None
 
-        
-        if existing_version is not None:
-            if incoming_version < existing_version:
-                log.warning("Rejected trade %r: incoming version %r is lower than existing version %r", record.get("trade_id"), incoming_version, existing_version)
-                print(f"Rejected trade {record.get('trade_id')}: incoming version {incoming_version} is lower than existing version {existing_version}")
-                cursor.close()
-                conn.close()
-                return  # Reject lower version
-            # If same version, update; if higher, update (or insert if needed)
-            updated = cursor.execute("""
-                UPDATE trades
-                SET counterparty_id=?, book_id=?, maturity_date=?, created_date=?, expired=?, version=?
-                WHERE trade_id=? AND version=?
-            """, (
-                record.get("counterparty_id"),
-                record.get("book_id"),
-                maturity_date,
-                _parse_date(record.get("created_date")),
-                record.get("expired"),
-                incoming_version,
-                record.get("trade_id"),
-                existing_version,
-            )).rowcount
+        log.info("[ingestsql] existing=%s incoming=%s for trade_id=%s book_id=%s",
+         existing_version, incoming_version, record.get("trade_id"), record.get("book_id"))
+         # ----- version handling -----
+        if existing_version is not None and incoming_version < existing_version:
+            # Reject lower version
+            log.info(
+                "Reject lower version: trade_id=%s book_id=%s incoming=%s existing=%s",
+                record.get("trade_id"), record.get("book_id"),
+                incoming_version, existing_version
+            )
+            cursor.close(); conn.close()
+            return
+
+        if existing_version is not None and incoming_version == existing_version:
+            # Update same version IN PLACE; include book_id in WHERE
+            updated = cursor.execute(
+                """
+                UPDATE dbo.trades
+                   SET counterparty_id=?, book_id=?, maturity_date=?, created_date=?, expired=?
+                 WHERE trade_id=? AND book_id=? AND [version]=?
+                """,
+                (
+                    record.get("counterparty_id"),
+                    record.get("book_id"),
+                    maturity_date,
+                    _parse_date(record.get("created_date")),
+                    record.get("expired"),
+                    record.get("trade_id"),
+                    record.get("book_id"),
+                    existing_version,
+                ),
+            ).rowcount
+
             if updated == 0:
-                print("Zero updated, inserting new")
-                # If no rows updated (shouldn't happen), insert new
-                cursor.execute("""
-                    INSERT INTO trades (trade_id, version, counterparty_id, book_id, maturity_date, created_date, expired)
+                # Fallback: if row somehow disappeared, INSERT it
+                log.warning(
+                    "Expected to UPDATE v%s but row not found; inserting",
+                    existing_version
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO dbo.trades
+                      (trade_id, [version], counterparty_id, book_id, maturity_date, created_date, expired)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
+                    """,
+                    (
+                        record.get("trade_id"),
+                        incoming_version,
+                        record.get("counterparty_id"),
+                        record.get("book_id"),
+                        maturity_date,
+                        _parse_date(record.get("created_date")),
+                        record.get("expired"),
+                    ),
+                )
+        else:
+            # incoming_version > existing_version OR no existing row -> INSERT new
+            cursor.execute(
+                """
+                INSERT INTO dbo.trades
+                  (trade_id, [version], counterparty_id, book_id, maturity_date, created_date, expired)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
                     record.get("trade_id"),
                     incoming_version,
                     record.get("counterparty_id"),
@@ -100,28 +134,13 @@ async def insert_record(record):
                     maturity_date,
                     _parse_date(record.get("created_date")),
                     record.get("expired"),
-                ))
-        else:
-            print("No existing trade, inserting new")
-            # No existing trade, insert new
-            cursor.execute("""
-                INSERT INTO trades (trade_id, version, counterparty_id, book_id, maturity_date, created_date, expired)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                record.get("trade_id"),
-                incoming_version,
-                record.get("counterparty_id"),
-                record.get("book_id"),
-                maturity_date,
-                _parse_date(record.get("created_date")),
-                record.get("expired"),
-            ))
-    
+                ),
+            )
+
         conn.commit()
         cursor.close()
         conn.close()
 
-    # Run blocking DB insert in a worker thread
     await asyncio.to_thread(_sync_insert)
 
 def _parse_date(value: Any) -> Optional[dt.date]:
@@ -171,6 +190,7 @@ def json_deserializer(v):
         return {"__raw__": s, "__parse_error__": "JSONDecodeError"}
 
 async def consume():
+    log.info("MSSQL consumer starting: bootstrap=%s topic=%s group=%s", KAFKA_BOOTSTRAP, KAFKA_TOPIC, KAFKA_GROUP)
     consumer = AIOKafkaConsumer(
         KAFKA_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP,
@@ -198,6 +218,7 @@ async def consume():
 
             try:
                 # TODO: validate schema here before DB insert
+                log.info("[ingestsql] got trade_id=%s version=%s book_id=%s", val.get("trade_id"), val.get("version"), val.get("book_id"))
                 await insert_record(val)  # your function
                 await consumer.commit()
             except Exception as e:
