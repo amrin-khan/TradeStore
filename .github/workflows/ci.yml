@@ -59,17 +59,18 @@ jobs:
         run: pip-audit -r TradeData/requirements.txt --strict
 
       # ---- Build service images ----
-      - name: Build images
+      - name: Compose build
         run: |
-          docker compose build
-          docker compose up -d tradedata kafkaconsumer kafkaconsumermssql
-
+          docker compose build \
+            tradedata \
+            kafkaconsumer \
+            kafkaconsumermssql
 
       - name: Push images (optional)
         run: |
           docker push $IMAGE_PREFIX-tradedata
-          docker push $IMAGE_PREFIX-kc-mongo
-          docker push $IMAGE_PREFIX-kc-mssql
+          docker push $IMAGE_PREFIX-kafkaconsumer
+          docker push $IMAGE_PREFIX-kafkaconsumermssql
 
       # ---- Bring up infra + apps ----
       - name: Compose up core infra (Kafka, Mongo, MSSQL)
@@ -94,7 +95,7 @@ jobs:
           docker compose up -d tradedata kafkaconsumer kafkaconsumermssql
           sleep 5
           docker compose ps
-
+      
       # ---- Image scans (fail on HIGH/CRITICAL) ----
       - name: Trivy scan - TradeData
         uses: aquasecurity/trivy-action@0.24.0
@@ -109,7 +110,7 @@ jobs:
       - name: Trivy scan - KafkaConsumer (Mongo)
         uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-kc-mongo
+          image-ref: ${{ env.IMAGE_PREFIX }}-kafkaconsumer
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
@@ -119,7 +120,7 @@ jobs:
       - name: Trivy scan - KafkaConsumerMSSQL
         uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-kc-mssql
+          image-ref: ${{ env.IMAGE_PREFIX }}-kafkaconsumermssql
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
