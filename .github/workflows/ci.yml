@@ -51,13 +51,6 @@ jobs:
           python -m pip install --no-cache-dir "safety>=3.0.0,<4"
           python -m safety --version
 
-      - name: Write Safety v3 policy
-        shell: bash
-        run: |
-          printf "%s\n" "\
-        version: '3.0'  
-
-
       - name: Safety scan (policy-driven)
         run: |
           python -m safety scan --policy-file .safety-policy.yml --detailed-output
