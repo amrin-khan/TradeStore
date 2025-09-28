@@ -169,4 +169,5 @@ jobs:
         if: always()
         env:
           MSSQL_SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
+          DROP_TABLE: "false"           # silence the warning
         run: docker compose down -v
