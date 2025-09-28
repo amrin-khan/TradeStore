@@ -61,9 +61,9 @@ jobs:
       # ---- Build service images ----
       - name: Build images
         run: |
-          docker build -t $IMAGE_PREFIX-tradedata TradeData
-          docker build -t $IMAGE_PREFIX-kc-mongo kafkaconsumer
-          docker build -t $IMAGE_PREFIX-kc-mssql KafkaConsumerMSSql
+          docker compose build
+          docker compose up -d tradedata kafkaconsumer kafkaconsumermssql
+
 
       - name: Push images (optional)
         run: |
