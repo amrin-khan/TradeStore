@@ -156,7 +156,7 @@ services:
 
   kafkaconsumermssql:
     build:
-      context: ./KafkaConsumerMSSql
+      context: ./KafkaConsumerMSSQL
     environment:
       - KAFKA_BOOTSTRAP=redpanda:9092
       - KAFKA_TOPIC=trades
