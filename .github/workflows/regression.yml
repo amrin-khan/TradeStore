@@ -1,11 +1,10 @@
-# .github/workflows/regression.yml
 name: Regression
 
 on:
   push:
     branches: [ main ]
   schedule:
-    - cron: "0 02 * * *"     # nightly 02:00 UTC
+    - cron: "0 02 * * *"
   workflow_dispatch:
 
 jobs:
@@ -20,7 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      #Free up some disk space on GitHub runners (helps big images)
       - name: Free disk space
         run: |
           sudo rm -rf /usr/local/lib/android /opt/ghc || true
@@ -28,12 +26,15 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Create .env for compose (used by mssql + mssql-init)
+      # Create .env once
       - name: Write .env for compose
         run: |
-          echo "MSSQL_SA_PASSWORD=${{ secrets.MSSQL_SA_PASSWORD }}" > .env
-          echo "DROP_TABLE=false" >> .env
-          
+          cat > .env <<EOF
+          MSSQL_SA_PASSWORD=${{ secrets.MSSQL_SA_PASSWORD }}
+          DROP_TABLE=false
+          EOF
+
+      # Optional cache (ok to remove)
       - name: Set up Docker layer cache
         uses: actions/cache@v4
         with:
@@ -42,24 +43,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      # Create .env for docker compose (read by your compose file)
-      - name: Write .env for compose
+      - name: Build RegressionRunner
         run: |
-          cat > .env <<EOF
-          MSSQL_SA_PASSWORD=${{ secrets.MSSQL_SA_PASSWORD }}
-          # you can add other overrides here if needed
-          EOF
-
-      # Build regression runner image (kept separate from compose images)
-      - name: Build RegressionRunner 
-        env:
-          DOCKER_BUILDKIT: "0"
-        run: |
-          docker build \
-            -f tests/RegressionRunner.Dockerfile \
-            -t tradestore/regression:latest \
-            .
-
+          docker build -f tests/RegressionRunner.Dockerfile -t tradestore/regression:latest .
 
       - name: Bring up infra + apps
         run: |
@@ -71,57 +57,15 @@ jobs:
         run: |
           docker compose --env-file .env run -T --rm --no-deps mssql-init
 
-      - name: Debug MSSQL connectivity
-        run: |
-          docker compose --env-file .env exec -T mssql \
-            bash -lc 'PASS="${SA_PASSWORD:-$MSSQL_SA_PASSWORD}"; \
-            echo "PASS set? ${PASS:+yes}"; \
-            /opt/mssql-tools18/bin/sqlcmd -C -S localhost,1433 -U sa -P "$PASS" -d master -Q "SELECT DB_NAME();"'
-
-      - name: Run regression suite
-        run: |
-          # sanity-check the table in the expected DB (master in your setup)
-          docker compose --env-file .env exec -T mssql \
-            /opt/mssql-tools18/bin/sqlcmd -C -S localhost,1433 -U sa -P "$MSSQL_SA_PASSWORD" -d master \
-            -Q "SELECT DB_NAME() AS db, SCHEMA_NAME(schema_id) AS sch, name FROM sys.tables WHERE name='trades';"
-
-          # fail fast if not present
-          docker compose --env-file .env exec -T mssql \
-            /opt/mssql-tools18/bin/sqlcmd -C -S localhost,1433 -U sa -P "$MSSQL_SA_PASSWORD" -d master \
-            -Q "IF OBJECT_ID('dbo.trades','U') IS NULL BEGIN RAISERROR('dbo.trades missing',16,1); END"
-
-          docker compose --env-file .env run --rm --no-deps regression-runner
-          
-
-      # (Swap caches after build to keep them small)
-      - name: Move build cache
-        if: always()
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
-
-      # Quick visibility into what’s running
-      - name: Show container state
-        run: |
-          docker ps -a
-          echo
-          docker compose ps
-          echo
-          docker compose ls
-
-      # Wait for API health + check health statuses to avoid race conditions
       - name: Wait for services to be healthy
         run: |
           set -e
-          # wait for healthchecks to pass
           for i in {1..60}; do
-            unhealthy=$(docker compose ps --format json | jq -r '.[] | select(.Health!="healthy") | .Name' | xargs)
+            unhealthy=$(docker compose ps --format json 2>/dev/null | jq -r '.[] | select(.Health!="healthy") | .Name' | xargs || true)
             [ -z "$unhealthy" ] && break
             echo "Waiting for healthy containers... not healthy: $unhealthy"
             sleep 2
           done
-
-          # ping API health endpoint
           for i in {1..60}; do
             if curl -fsS http://localhost:8001/health >/dev/null 2>&1; then
               echo "tradedata healthy"
@@ -130,27 +74,44 @@ jobs:
             echo "Waiting for tradedata health..."
             sleep 2
           done
-
-          # optional: check Redpanda topic exists
           docker compose exec -T redpanda rpk topic list --brokers redpanda:9092 || true
+
+      - name: Debug MSSQL connectivity
+        run: |
+          docker compose --env-file .env exec -T mssql bash -lc '
+            PASS="${SA_PASSWORD:-$MSSQL_SA_PASSWORD}";
+            echo "PASS set? ${PASS:+yes}";
+            SQLCMD=$([ -x /opt/mssql-tools18/bin/sqlcmd ] && echo /opt/mssql-tools18/bin/sqlcmd || echo /opt/mssql-tools/bin/sqlcmd);
+            echo "Using $SQLCMD";
+            "$SQLCMD" -C -S localhost,1433 -U sa -P "$PASS" -d master -Q "SELECT DB_NAME();"
+          '
+
+      - name: Sanity: dbo.trades present
+        run: |
+          docker compose --env-file .env exec -T mssql bash -lc '
+            PASS="${SA_PASSWORD:-$MSSQL_SA_PASSWORD}";
+            SQLCMD=$([ -x /opt/mssql-tools18/bin/sqlcmd ] && echo /opt/mssql-tools18/bin/sqlcmd || echo /opt/mssql-tools/bin/sqlcmd);
+            "$SQLCMD" -C -S localhost,1433 -U sa -P "$PASS" -d master \
+              -Q "SELECT DB_NAME() db, SCHEMA_NAME(schema_id) sch, name FROM sys.tables WHERE name=''trades'';"
+            "$SQLCMD" -C -S localhost,1433 -U sa -P "$PASS" -d master \
+              -Q "IF OBJECT_ID(''dbo.trades'',''U'') IS NULL BEGIN RAISERROR(''dbo.trades missing'',16,1); END"
+          '
 
       - name: Run regression suite
         run: |
-          # Use --rm so the ephemeral regression-runner is removed afterwards
           docker compose --env-file .env --profile regression run --rm regression-runner
 
-      # collect logs
       - name: Compose logs
-        env:
-          COMPOSE_PROJECT_NAME: tradestore
-          COMPOSE_PROFILES: regression
-          DROP_TABLE: "false"        # <— add this
         if: always()
         run: |
-          echo "===== mssql-init (last 15m) ====="
-          docker compose --env-file .env logs --no-color --since 15m mssql-init || true
-          echo "===== regression-runner (last 15m) ====="
-          docker compose --env-file .env logs --no-color --since 15m regression-runner || true
+          {
+            echo "===== mssql-init (last 15m) ====="
+            docker compose --env-file .env logs --no-color --since 15m mssql-init || true
+            echo "===== regression-runner (last 15m) ====="
+            docker compose --env-file .env logs --no-color --since 15m regression-runner || true
+            echo "===== all (last 15m) ====="
+            docker compose --env-file .env logs --no-color --since 15m || true
+          } | tee -a compose.log
 
       - name: Upload compose logs
         if: always()
@@ -159,19 +120,6 @@ jobs:
           name: compose-logs
           path: compose.log
 
-      # If your regression runner writes junit/coverage, upload them too
-      - name: Upload regression artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: regression-artifacts
-          path: |
-            tests/.pytest_cache
-            tests/junit.xml
-            tests/coverage.xml
-          if-no-files-found: ignore
-
-      # Tear everything down (including volumes) to keep the runner clean
       - name: Tear down
         if: always()
         run: docker compose --env-file .env down -v --remove-orphans

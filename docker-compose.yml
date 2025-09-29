@@ -222,7 +222,7 @@ services:
   ingestsql-tests:
     profiles: ["test"]
     build:
-      context: ./KafkaConsumerMSSql
+      context: ./KafkaConsumerMSSQL
       dockerfile: Dockerfile
       target: test        # <- uses the test target we appended to kafkaconsumermssql/Dockerfile
     networks:
