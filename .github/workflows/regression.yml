@@ -36,7 +36,7 @@ jobs:
 
       - name: Prepare .env
         run: |
-          cp .env.regression .env
+          cp .env .env
           # substitute GitHub secret into place
           sed -i "s|\${{ secrets.MSSQL_SA_PASSWORD }}|${{ secrets.MSSQL_SA_PASSWORD }}|" .env
           
