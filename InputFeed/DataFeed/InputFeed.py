@@ -10,9 +10,9 @@ from urllib3.util.retry import Retry
 
 # ---------- config ----------
 CSV_PATH = "./rawData/TradeData.csv"
-ENDPOINT = "http://tradedata:8001/trades"   # <-- change me
-BEARER_TOKEN = ""                              # e.g. "abc123" or leave blank
-EXTRA_HEADERS = {"X-Source": "csv-import"}     # optional
+ENDPOINT = "http://tradedata:8001/trades"   
+BEARER_TOKEN = ""                           
+EXTRA_HEADERS = {"X-Source": "csv-import"}  
 TIMEOUT_SECS = 15
 RETRIES = 3
 BACKOFF = 0.5

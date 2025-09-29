@@ -9,8 +9,6 @@ from typing import Any, Optional
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-
-
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "redpanda:9092")
 KAFKA_TOPIC     = os.getenv("KAFKA_TOPIC", "trades")
 KAFKA_GROUP     = os.getenv("KAFKA_GROUP", "trade-consumer-B")
@@ -36,10 +34,6 @@ _DATE_FORMATS = [
 async def insert_record(record):
     maturity_date = _parse_date(record.get("maturity_date"))
     today = dt.date.today()
-    # if maturity_date is not None and maturity_date < today:
-    #     log.warning("Rejected trade %r: maturity date %r is earlier than today (%r)", record.get("trade_id"), maturity_date, today)
-    #     print(f"Rejected trade {record.get('trade_id')}: maturity date {maturity_date} is earlier than today ({today})")
-    #     return  # Reject the trade
     def _sync_insert():
         conn = pyodbc.connect(MSSQL_CONN_STRING)
         cursor = conn.cursor()
@@ -77,7 +71,7 @@ async def insert_record(record):
             return
 
         if existing_version is not None and incoming_version == existing_version:
-            # Update same version IN PLACE; include book_id in WHERE
+            # Update same version IN PLACE;
             updated = cursor.execute(
                 """
                 UPDATE dbo.trades
@@ -97,7 +91,7 @@ async def insert_record(record):
             ).rowcount
 
             if updated == 0:
-                # Fallback: if row somehow disappeared, INSERT it
+                # Fallback
                 log.warning(
                     "Expected to UPDATE v%s but row not found; inserting",
                     existing_version
@@ -157,7 +151,6 @@ def _parse_date(value: Any) -> Optional[dt.date]:
         except Exception:
             pass
     s = str(value).strip()
-    # try ISO first
     try:
         # dt.fromisoformat handles many variants, including 'YYYY-MM-DD'
         return dt.datetime.fromisoformat(s.replace("Z", "+00:00")).date()
@@ -217,7 +210,6 @@ async def consume():
                 continue
 
             try:
-                # TODO: validate schema here before DB insert
                 log.info("[ingestsql] got trade_id=%s version=%s book_id=%s", val.get("trade_id"), val.get("version"), val.get("book_id"))
                 await insert_record(val)  # your function
                 await consumer.commit()
@@ -227,7 +219,6 @@ async def consume():
                     "DB insert failed for t=%s p=%s o=%s key=%r val=%r",
                     msg.topic, msg.partition, msg.offset, msg.key, val
                 )
-                # optional: produce to a DLQ; or break/retry
     finally:
         await consumer.stop()
 

@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main ]
   schedule:
-    - cron: "0 2 * * *"     # nightly 02:00 UTC
+    - cron: "0 02 * * *"     # nightly 02:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Optional: Free up some disk space on GitHub runners (helps big images)
+      #Free up some disk space on GitHub runners (helps big images)
       - name: Free disk space
         run: |
           sudo rm -rf /usr/local/lib/android /opt/ghc || true
@@ -108,7 +108,7 @@ jobs:
           # Use --rm so the ephemeral regression-runner is removed afterwards
           docker compose --profile regression run --rm regression-runner
 
-      # Always collect logs; they’re invaluable even when green
+      # collect logs
       - name: Compose logs
         if: always()
         run: |
