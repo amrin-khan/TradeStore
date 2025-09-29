@@ -69,10 +69,20 @@ jobs:
 
       - name: Init DB (one-off)
         run: |
-          docker compose --env-file .env run --rm --no-deps mssql-init
+          docker compose --env-file .env run -T --rm --no-deps mssql-init
 
       - name: Run regression suite
         run: |
+          # sanity-check the table in the expected DB (master in your setup)
+          docker compose --env-file .env exec -T mssql \
+            /opt/mssql-tools18/bin/sqlcmd -C -S localhost,1433 -U sa -P "$MSSQL_SA_PASSWORD" -d master \
+            -Q "SELECT DB_NAME() AS db, SCHEMA_NAME(schema_id) AS sch, name FROM sys.tables WHERE name='trades';"
+
+          # fail fast if not present
+          docker compose --env-file .env exec -T mssql \
+            /opt/mssql-tools18/bin/sqlcmd -C -S localhost,1433 -U sa -P "$MSSQL_SA_PASSWORD" -d master \
+            -Q "IF OBJECT_ID('dbo.trades','U') IS NULL BEGIN RAISERROR('dbo.trades missing',16,1); END"
+
           docker compose --env-file .env run --rm --no-deps regression-runner
           
 

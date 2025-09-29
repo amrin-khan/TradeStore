@@ -1,0 +1,1 @@
+IF OBJECT_ID('dbo.trades','U') IS NOT NULL DROP TABLE dbo.trades;

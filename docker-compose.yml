@@ -82,18 +82,19 @@ services:
 
   mssql-init:
     image: mcr.microsoft.com/mssql-tools:latest
-    platform: linux/amd64
     environment:
       MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set in .env}
       DROP_TABLE: ${DROP_TABLE:-false}
     volumes:
       - ./scripts/mssql-init.sh:/docker-entrypoint-initdb.d/mssql-init.sh:ro
+      - ./scripts/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - ./scripts/drop.sql:/docker-entrypoint-initdb.d/drop.sql:ro
     depends_on:
-      mssql:
-        condition: service_healthy
-    networks: [mssqlnet]
+      mssql: { condition: service_healthy }
     entrypoint: ["/bin/bash", "/docker-entrypoint-initdb.d/mssql-init.sh"]
+    networks: [mssqlnet]
     restart: "no"
+
 
   tradedata:
     build:
