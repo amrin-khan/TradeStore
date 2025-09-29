@@ -84,8 +84,8 @@ services:
     image: mcr.microsoft.com/mssql-tools:latest
     platform: linux/amd64
     environment:
-      SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set in .env}  # map from .env
-      DROP_TABLE:  ${DROP_TABLE:-false}             
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set in .env}
+      DROP_TABLE: ${DROP_TABLE:-false}
     volumes:
       - ./scripts/mssql-init.sh:/docker-entrypoint-initdb.d/mssql-init.sh:ro
     depends_on:
