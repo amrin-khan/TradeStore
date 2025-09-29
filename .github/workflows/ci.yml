@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - 'feature/wip'
   pull_request:
 
 permissions:

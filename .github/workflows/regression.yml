@@ -45,22 +45,40 @@ jobs:
           EOF
 
       # Build regression runner image (kept separate from compose images)
-      - name: Build regression runner image
+      - name: Build RegressionRunner 
+        env:
+          DOCKER_BUILDKIT: "0"
         run: |
           docker build \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            --cache-from=type=local,src=/tmp/.buildx-cache \
-            --cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max \
             -f tests/RegressionRunner.Dockerfile \
             -t tradestore/regression:latest \
             .
 
-      # Build & start infra + apps via compose
-      - name: Compose up (infra + apps)
+
+      # ---- Run regression profile (infra + apps + tests) ----
+      - name: Compose up regression profile (infra + apps + tests)
+        env:
+          DROP_TABLE: "false"
         run: |
-          docker compose --profile regression up -d --build \
-            redpanda redpanda-init mongo mssql mssql-init \
-            tradedata kafkaconsumer kafkaconsumermssql
+          docker compose \
+            -f docker-compose.yml \
+            --profile regression \
+            up -d --build \
+              redpanda redpanda-init mongo mssql mssql-init \
+              tradedata kafkaconsumer kafkaconsumermssql \
+              regression-runner
+
+          echo "Waiting for core services..."
+          for i in {1..60}; do
+            H=$(docker inspect -f '{{.State.Health.Status}}' $(docker compose ps -q redpanda) || echo "starting")
+            [ "$H" = "healthy" ] && break || sleep 2
+          done
+          for i in {1..60}; do
+            H=$(docker inspect -f '{{.State.Health.Status}}' $(docker compose ps -q mongo) || echo "starting")
+            [ "$H" = "healthy" ] && break || sleep 2
+          done
+          sleep 10
+          docker compose ps
 
       # (Swap caches after build to keep them small)
       - name: Move build cache
