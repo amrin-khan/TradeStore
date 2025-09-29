@@ -86,7 +86,7 @@ jobs:
             "$SQLCMD" -C -S localhost,1433 -U sa -P "$PASS" -d master -Q "SELECT DB_NAME();"
           '
 
-      - name: Sanity: dbo.trades present
+      - name: Sanity dbo.trades present
         run: |
           docker compose --env-file .env exec -T mssql bash -lc '
             PASS="${SA_PASSWORD:-$MSSQL_SA_PASSWORD}";
