@@ -26,13 +26,24 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Create .env once
-      - name: Write .env for compose
+      # # Create .env once
+      # - name: Write .env for compose
+      #   run: |
+      #     cat > .env <<EOF
+      #     MSSQL_SA_PASSWORD=${{ secrets.MSSQL_SA_PASSWORD }}
+      #     DROP_TABLE=false
+      #     EOF
+
+      - name: Prepare .env
         run: |
-          cat > .env <<EOF
-          MSSQL_SA_PASSWORD=${{ secrets.MSSQL_SA_PASSWORD }}
-          DROP_TABLE=false
-          EOF
+          cp .env.regression .env
+          # substitute GitHub secret into place
+          sed -i "s|\${{ secrets.MSSQL_SA_PASSWORD }}|${{ secrets.MSSQL_SA_PASSWORD }}|" .env
+          
+      - name: Show .env
+        run: |
+          echo "=== .env contents ==="
+          cat .env
 
       # Optional cache (ok to remove)
       - name: Set up Docker layer cache
