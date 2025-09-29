@@ -86,36 +86,13 @@ services:
     environment:
       SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set in .env}  # map from .env
       DROP_TABLE:  ${DROP_TABLE:-false}             
+    volumes:
+      - ./scripts/mssql-init.sh:/docker-entrypoint-initdb.d/mssql-init.sh:ro
     depends_on:
       mssql:
         condition: service_healthy
     networks: [mssqlnet]
-    entrypoint: >
-      bash -lc "
-        for i in {1..30}; do
-          /opt/mssql-tools/bin/sqlcmd -S mssql,1433 -U sa -P '$MSSQL_SA_PASSWORD' -C -Q 'SELECT 1' -b && break || sleep 2;
-        done;
-        if [ \"\$DROP_TABLE\" = \"true\" ]; then
-          /opt/mssql-tools/bin/sqlcmd -S mssql,1433 -U sa -P '$MSSQL_SA_PASSWORD' -d master -C -Q \"
-            IF OBJECT_ID('dbo.trades','U') IS NOT NULL DROP TABLE dbo.trades;
-          \";
-        fi;
-        /opt/mssql-tools/bin/sqlcmd -S mssql,1433 -U sa -P '$MSSQL_SA_PASSWORD' -d master -C -Q \"
-          IF OBJECT_ID('dbo.trades','U') IS NULL
-          BEGIN
-            CREATE TABLE dbo.trades(
-              trade_id        varchar(50)  NOT NULL,
-              counterparty_id varchar(50)  NOT NULL,
-              book_id         varchar(50)  NOT NULL,
-              [version]       int          NOT NULL,
-              maturity_date   date         NULL,
-              created_date    date         NULL,
-              expired         bit          NOT NULL,
-              CONSTRAINT PK_trades PRIMARY KEY (trade_id,[version],book_id)
-            );
-          END
-        \";
-      "
+    entrypoint: ["/bin/bash", "/docker-entrypoint-initdb.d/mssql-init.sh"]
     restart: "no"
 
   tradedata:
