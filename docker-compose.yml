@@ -67,7 +67,7 @@ services:
     platform: linux/amd64
     environment:
       - ACCEPT_EULA=Y
-      - SA_PASSWORD=${MSSQL_SA_PASSWORD:?set in .env}
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:?set in .env}
     volumes:
       - mssql-data:/var/opt/mssql
     ports:

@@ -71,6 +71,13 @@ jobs:
         run: |
           docker compose --env-file .env run -T --rm --no-deps mssql-init
 
+      - name: Debug MSSQL connectivity
+        run: |
+          docker compose --env-file .env exec -T mssql \
+            bash -lc 'PASS="${SA_PASSWORD:-$MSSQL_SA_PASSWORD}"; \
+            echo "PASS set? ${PASS:+yes}"; \
+            /opt/mssql-tools18/bin/sqlcmd -C -S localhost,1433 -U sa -P "$PASS" -d master -Q "SELECT DB_NAME();"'
+
       - name: Run regression suite
         run: |
           # sanity-check the table in the expected DB (master in your setup)
