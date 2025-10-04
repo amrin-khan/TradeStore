@@ -21,7 +21,7 @@ def test_api_to_kafka_to_mssql_version_flow(http, base_url, mssql, new_trade_id,
             "version": str(version),
             "counterparty_id": f"CP-{version}",
             "book_id": "B-V",
-            "maturity_date": "2031-01-01",
+            "maturity_date": "2030-12-31",
             "created_date": dt.date.today().isoformat(),
             "expired": "N",
         }

@@ -71,7 +71,7 @@ async def insert_record(record):
             return
 
         if existing_version is not None and incoming_version == existing_version:
-            # Update same version IN PLACE;
+            # Update same version IN PLACE; include book_id in WHERE
             updated = cursor.execute(
                 """
                 UPDATE dbo.trades
@@ -91,7 +91,7 @@ async def insert_record(record):
             ).rowcount
 
             if updated == 0:
-                # Fallback
+                # Fallback: if row somehow disappeared, INSERT it
                 log.warning(
                     "Expected to UPDATE v%s but row not found; inserting",
                     existing_version
@@ -151,6 +151,7 @@ def _parse_date(value: Any) -> Optional[dt.date]:
         except Exception:
             pass
     s = str(value).strip()
+    # try ISO first
     try:
         # dt.fromisoformat handles many variants, including 'YYYY-MM-DD'
         return dt.datetime.fromisoformat(s.replace("Z", "+00:00")).date()
@@ -196,7 +197,7 @@ async def consume():
     await consumer.start()
     try:
         async for msg in consumer:
-            tp = TopicPartition(msg.topic, msg.partition)
+            # tp = TopicPartition(msg.topic, msg.partition)
             val = msg.value
 
             # Log context for bad records
@@ -210,6 +211,7 @@ async def consume():
                 continue
 
             try:
+                # TODO: validate schema here before DB insert
                 log.info("[ingestsql] got trade_id=%s version=%s book_id=%s", val.get("trade_id"), val.get("version"), val.get("book_id"))
                 await insert_record(val)  # your function
                 await consumer.commit()
@@ -219,6 +221,7 @@ async def consume():
                     "DB insert failed for t=%s p=%s o=%s key=%r val=%r",
                     msg.topic, msg.partition, msg.offset, msg.key, val
                 )
+                # optional: produce to a DLQ; or break/retry
     finally:
         await consumer.stop()
 

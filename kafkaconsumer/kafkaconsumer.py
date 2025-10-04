@@ -1,12 +1,10 @@
 # kafkaconsumer.py
 import os
 import asyncio
-from contextlib import suppress
 import json
 import signal
-import uuid
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aiokafka import AIOKafkaConsumer
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -53,7 +51,7 @@ def normalize(doc: Dict[str, Any]) -> Dict[str, Any]:
 
 # ---------- main consumer ----------
 async def consumer_task():
-    mcli = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=3000, connectTimeoutMS=3000)
+    mcli = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=3000, uuidRepresentation="standard", maxPoolSize=50, connectTimeoutMS=3000)
     try:
         # Time-bound the ping so it can be interrupted and tests can simulate failures
         await asyncio.wait_for(mcli.admin.command("ping"), timeout=3.0)
@@ -66,7 +64,6 @@ async def consumer_task():
         mcli.close()
         return
     coll = mcli[MONGO_DB][MONGO_COLL]
-    print(f"teempm {mcli[MONGO_DB][MONGO_COLL]} {MONGO_DB} {MONGO_COLL} {MONGO_URI}")    
     consumer = AIOKafkaConsumer(
         KAFKA_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP,
@@ -79,7 +76,6 @@ async def consumer_task():
         max_poll_interval_ms=300000,
     )
     await consumer.start()
-    print("xyz" f"[kafka] connected {KAFKA_BOOTSTRAP} topic={KAFKA_TOPIC} group={KAFKA_GROUP}")
     try:
         while not shutdown.is_set():
             batch_map = await consumer.getmany(timeout_ms=POLL_TIMEOUT_MS, max_records=MAX_RECORDS)
@@ -102,13 +98,12 @@ async def consumer_task():
                     doc = normalize(doc)
 
                     # UUID for _id
-                    doc["_id"] = str(uuid.uuid4())
+                    doc["_id"] = f"{tp.topic}:{tp.partition}:{msg.offset}"
 
                     # Add ingestion datetime
                     doc["ingest_time"] = datetime.utcnow()
                     print(f"[msg] {tp.topic}[{tp.partition}]@{msg.offset} id={doc['_id']} {doc['ingest_time']}")
                     ops.append(InsertOne(doc))
-                    print(f"amrin2 ops length: {len(ops)} {ops[0]}")
 
             if not ops:
                 await consumer.commit()
@@ -138,8 +133,6 @@ async def consumer_task():
             print("[warn] consumer.stop timeout")
         mcli.close()
         print("[done] consumer stopped; mongo closed")
-        mcli.close()
-        print("[done] consumer stopped; mongo closed")
 
 # ---------- signals / entry ----------
 async def main():
@@ -164,7 +157,7 @@ async def main():
     except asyncio.TimeoutError:
         print(f"[warn] grace {GRACE_TIMEOUT_S}s exceeded, cancelling")
         task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
+        with suppress(asyncio.CancelledError):
             await task
 
 if __name__ == "__main__":  # pragma: no cover
