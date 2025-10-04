@@ -159,6 +159,9 @@ services:
     build:
       context: .
       dockerfile: MarkExpired/ExpiryCron.Dockerfile
+      platforms:
+      - linux/amd64  
+    platform: linux/amd64
     environment:
       MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set in .env}
     depends_on:
