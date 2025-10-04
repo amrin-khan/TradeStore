@@ -1,0 +1,26 @@
+Build 
+docker compose --profile ops build --no-cache expiry-cron
+
+start 
+docker compose --profile ops up -d expiry-cron
+
+
+restart cron
+docker compose --profile ops restart expiry-cron
+
+
+manual-one off manual exec 
+docker exec -it tradestore-expiry-cron-1 bash -lc '/usr/local/bin/mark_expired.sh'
+
+ chk the results 
+docker exec -it tradestore-expiry-cron-1 bash -lc 'tail -n 50 /var/log/cron.log'
+
+
+# List cron jobs loaded
+docker exec -it tradestore-expiry-cron-1 bash -lc 'crontab -l; cat /etc/cron.d/expiry'
+
+# Ensure cron daemon is running
+docker exec -it tradestore-expiry-cron-1 bash -lc 'ps aux | grep [c]ron'
+
+# Tail cron job logs
+docker exec -it tradestore-expiry-cron-1 bash -lc 'tail -n 50 /var/log/cron.log'
