@@ -55,11 +55,7 @@ jobs:
       - name: Install pip-audit
         run: python -m pip install --upgrade pip-audit
 
-      # - name: pip-audit TradeData (fail on vulns)
-        # if: hashFiles('TradeData/requirements.txt') != ''
-      #   run: pip-audit -r TradeData/requirements.txt --strict
-
-      - name: "pip-audit (all services: requirements + requirements_dev)"
+      - name: "pip-audit (all services: requirements + requirements-dev)"
         env:
           # List your service folders here (space-separated)
           SERVICES: "TradeData kafkaconsumer KafkaConsumerMSSQL"
@@ -72,7 +68,7 @@ jobs:
           for svc in $SERVICES; do
             args=()
             [ -f "$svc/requirements.txt" ] && args+=(-r "$svc/requirements.txt")
-            [ -f "$svc/req_dev.txt" ] && args+=(-r "$svc/requirements_dev.txt")
+            [ -f "$svc/requirements-dev.txt" ] && args+=(-r "$svc/requirements-dev.txt")
 
             if [ ${#args[@]} -eq 0 ]; then
               echo "::notice::No requirements files in $svc; skipping."
@@ -87,6 +83,23 @@ jobs:
           done
 
           exit $failed
+
+      - name: Build unit-test images (profile=test)
+        run: |
+          docker compose --profile test build tradedata-tests kafkaconsumer-tests ingestsql-tests
+
+      - name: Run unit tests - TradeData
+        run: |
+          # run as an ephemeral container; exit code reflects pytest result
+          docker compose --profile test run --rm tradedata-tests
+
+      - name: Run unit tests - KafkaConsumer (Mongo)
+        run: |
+          docker compose --profile test run --rm kafkaconsumer-tests
+
+      - name: Run unit tests - KafkaConsumerMSSQL
+        run: |
+          docker compose --profile test run --rm ingestsql-tests
 
 
       # ---- Compose build/up using your override file ----
