@@ -55,9 +55,39 @@ jobs:
       - name: Install pip-audit
         run: python -m pip install --upgrade pip-audit
 
-      - name: pip-audit TradeData (fail on vulns)
-        if: hashFiles('TradeData/requirements.txt') != ''
-        run: pip-audit -r TradeData/requirements.txt --strict
+      # - name: pip-audit TradeData (fail on vulns)
+        # if: hashFiles('TradeData/requirements.txt') != ''
+      #   run: pip-audit -r TradeData/requirements.txt --strict
+
+      - name: pip-audit (all services: requirements + req_dev)
+        env:
+          # List your service folders here (space-separated)
+          SERVICES: "TradeData kafkaconsumer KafkaConsumerMSSQL"
+        run: |
+          set -euo pipefail
+
+          echo "Services to audit: $SERVICES"
+          failed=0
+
+          for svc in $SERVICES; do
+            args=()
+            [ -f "$svc/requirements.txt" ] && args+=(-r "$svc/requirements.txt")
+            [ -f "$svc/req_dev.txt" ] && args+=(-r "$svc/requirements_dev.txt")
+
+            if [ ${#args[@]} -eq 0 ]; then
+              echo "::notice::No requirements files in $svc; skipping."
+              continue
+            fi
+
+            echo "==> Auditing $svc with: ${args[*]}"
+            if ! pip-audit "${args[@]}" --strict; then
+              echo "::error title=pip-audit::$svc has vulnerabilities"
+              failed=1
+            fi
+          done
+
+          exit $failed
+
 
       # ---- Compose build/up using your override file ----
       - name: Compose build (use override)
