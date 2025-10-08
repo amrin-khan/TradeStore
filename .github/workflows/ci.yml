@@ -101,6 +101,28 @@ jobs:
         run: |
           docker compose --profile test run --rm ingestsql-tests
 
+      - name: Collect coverage files from containers
+        run: |
+          mkdir -p coverage
+          docker compose --profile test cp tradedata-tests:/coverage/tradedata-coverage.xml ./coverage/ || true
+          docker compose --profile test cp kafkaconsumer-tests:/coverage/kafkaconsumer-coverage.xml ./coverage/ || true
+          docker compose --profile test cp ingestsql-tests:/coverage/ingestsql-coverage.xml ./coverage/ || true
+
+      - name: Merge coverage results
+        run: |
+          pip install coverage
+          coverage combine coverage/*.xml || true
+          coverage html -d coverage/html
+          coverage report --fail-under=85   # enforce 85% threshold (change as needed)
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: combined-coverage
+          path: coverage/
+
+
 
       # ---- Compose build/up using your override file ----
       - name: Compose build (use override)
