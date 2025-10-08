@@ -163,8 +163,8 @@ async def test_insert_record_rejects_lower_version(monkeypatch):
     # No INSERT/UPDATE; and commit should not be called
     sqls = [s for (s, _) in cur.executed]
     assert any(_norm(s).startswith("SELECT") for s in sqls)
-    assert any(_is_update_trades(s) for s in sqls)
     assert not any(_is_insert_trades(s) for s in sqls)
+    assert not any(_is_update_trades(s) for s in sqls)
     assert conn.committed is False
 
 
@@ -193,9 +193,9 @@ async def test_insert_record_updates_when_same_version(monkeypatch):
 
     await mod.insert_record(record)
     sqls = [s for (s, _) in cur.executed]
-    assert any(s.upper().startswith("SELECT") for s in sqls)
-    assert any(s.upper().startswith("UPDATE TRADES") for s in sqls)
-    assert not any(s.upper().startswith("INSERT INTO TRADES") for s in sqls)
+    assert any(_norm(s).startswith("SELECT") for s in sqls)
+    assert any(_is_update_trades(s) for s in sqls)
+    assert not any(_is_insert_trades(s) for s in sqls)
     assert conn.committed is True
 
 
