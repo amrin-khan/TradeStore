@@ -88,6 +88,11 @@ jobs:
         run: |
           docker compose --profile test build tradedata-tests kafkaconsumer-tests ingestsql-tests
 
+      - name: Prepare coverage dir
+        run: |
+          mkdir -p coverage
+          chmod 777 coverage   # simplest cross-runner fix
+          
       - name: Run unit tests - TradeData
         run: |
           mkdir -p coverage

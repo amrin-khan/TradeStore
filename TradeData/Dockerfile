@@ -27,6 +27,9 @@ WORKDIR /app
 # ------------------------------
 FROM base AS test
 
+RUN mkdir -p /coverage && chmod 777 /coverage
+ENV COVERAGE_FILE=/coverage/.coverage.tradedata
+
 # Install runtime + dev/test deps
 COPY requirements.txt requirements-dev.txt /app/
 RUN python -m pip install --upgrade pip && \

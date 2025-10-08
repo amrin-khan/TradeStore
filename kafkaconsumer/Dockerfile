@@ -25,6 +25,9 @@ WORKDIR /app
 ############################
 FROM base AS test
 
+RUN mkdir -p /coverage && chmod 777 /coverage
+ENV COVERAGE_FILE=/coverage/.coverage.kafkaconsumer
+
 # Dependencies
 COPY requirements.txt /app/requirements.txt
 # If you have requirements-dev.txt, uncomment the next line and install it too

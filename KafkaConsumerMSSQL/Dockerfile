@@ -33,6 +33,9 @@ WORKDIR /app
 #####################################
 FROM base AS test
 
+RUN mkdir -p /coverage && chmod 777 /coverage
+ENV COVERAGE_FILE=/coverage/.coverage.kafkaconsumermssql
+
 # Python deps (runtime + test tools)
 COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && \
