@@ -92,24 +92,25 @@ jobs:
       #   run: |
       #     mkdir -p coverage
       #     chmod 777 coverage   # simplest cross-runner fix
-            
-      - name: Build test images (no cache, to drop old coverage env)
+                  
+      - name: Run unit tests - TradeData
         run: |
-          docker compose --profile test build --no-cache \
-            tradedata-tests kafkaconsumer-tests ingestsql-tests
+          # run as an ephemeral container; exit code reflects pytest result
+          docker compose --profile test run --rm tradedata-tests
 
-      - name: Run unit tests (no coverage)
-        env:
-          SERVICES_TEST: "tradedata-tests kafkaconsumer-tests ingestsql-tests"
+
+
+      - name: Run unit tests - KafkaConsumer (Mongo)
         run: |
-          set -euo pipefail
-          for svc in $SERVICES_TEST; do
-            echo "==> $svc"
-            docker compose --profile test run --rm \
-              -e COVERAGE_FILE= \
-              -e COVERAGE_PROCESS_START= \
-              "$svc" -p no:pytest_cov
-          done
+          docker compose --profile test run --rm kafkaconsumer-tests
+
+
+
+      - name: Run unit tests - KafkaConsumerMSSQL
+        run: |
+          docker compose --profile test run --rm ingestsql-tests
+
+
 
       # - name: Run unit tests (mount /coverage)
       #   run: |
