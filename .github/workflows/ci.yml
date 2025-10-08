@@ -59,7 +59,7 @@ jobs:
         # if: hashFiles('TradeData/requirements.txt') != ''
       #   run: pip-audit -r TradeData/requirements.txt --strict
 
-      - name: pip-audit (all services: requirements + req_dev)
+      - name: "pip-audit (all services: requirements + requirements_dev)"
         env:
           # List your service folders here (space-separated)
           SERVICES: "TradeData kafkaconsumer KafkaConsumerMSSQL"
