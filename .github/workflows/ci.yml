@@ -93,42 +93,45 @@ jobs:
           mkdir -p coverage
           chmod 777 coverage   # simplest cross-runner fix
           
-      - name: Run unit tests - TradeData
-        run: |
-          mkdir -p coverage
-          docker compose --profile test run --rm \
-            -v $PWD/coverage:/coverage \
-            tradedata-tests
+      # - name: Run unit tests - TradeData
+      #   run: |
+      #     mkdir -p coverage
+      #     docker compose --profile test run --rm \
+      #       -v $PWD/coverage:/coverage \
+      #       tradedata-tests
 
-      - name: Run unit tests - KafkaConsumer (Mongo)
-        run: |
-          docker compose --profile test run --rm \
-            -v $PWD/coverage:/coverage \
-            kafkaconsumer-tests
+      # - name: Run unit tests - KafkaConsumer (Mongo)
+      #   run: |
+      #     docker compose --profile test run --rm \
+      #       -v $PWD/coverage:/coverage \
+      #       kafkaconsumer-tests
 
-      - name: Run unit tests - KafkaConsumerMSSQL
+      # - name: Run unit tests - KafkaConsumerMSSQL
+      #   run: |
+      #     docker compose --profile test run --rm \
+      #       -v $PWD/coverage:/coverage \
+      #       ingestsql-tests
+
+      - name: Run unit tests (mount /coverage)
         run: |
-          docker compose --profile test run --rm \
-            -v $PWD/coverage:/coverage \
-            ingestsql-tests
+          docker compose --profile test run --rm -v $PWD/coverage:/coverage tradedata-tests
+          docker compose --profile test run --rm -v $PWD/coverage:/coverage kafkaconsumer-tests
+          docker compose --profile test run --rm -v $PWD/coverage:/coverage ingestsql-tests
 
       - name: Collect coverage files from containers
         run: |
-          mkdir -p coverage
-          docker compose --profile test cp tradedata-tests:/coverage/tradedata-coverage.xml ./coverage/ || true
-          docker compose --profile test cp kafkaconsumer-tests:/coverage/kafkaconsumer-coverage.xml ./coverage/ || true
-          docker compose --profile test cp ingestsql-tests:/coverage/ingestsql-coverage.xml ./coverage/ || true
+          echo "Collecting coverage reports..."
+          mkdir -p coverage_collected
+          # Copy everything under the mounted coverage directory
+          cp -r coverage/* coverage_collected/ || true
+          ls -R coverage_collected
 
-      - name: Merge coverage and enforce threshold
+      - name: Merge and report combined coverage
         run: |
           python -m pip install --upgrade coverage
-          # Combine all raw data files in ./coverage
-          coverage combine coverage
-          # See a text summary and fail if below threshold (adjust number)
+          coverage combine coverage_collected
           coverage report --fail-under=85
-          # Produce unified XML & HTML
-          coverage xml -o coverage/coverage.xml
-          coverage html -d coverage/html
+          coverage xml -o coverage_collected/coverage.xml
           
       - name: Upload coverage artifacts
         if: always()

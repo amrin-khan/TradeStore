@@ -34,7 +34,7 @@ WORKDIR /app
 FROM base AS test
 
 RUN mkdir -p /coverage && chmod 777 /coverage
-ENV COVERAGE_FILE=/coverage/.coverage.kafkaconsumermssql
+# ENV COVERAGE_FILE=/coverage/.coverage.kafkaconsumermssql
 
 # Python deps (runtime + test tools)
 COPY requirements.txt /app/requirements.txt
@@ -47,7 +47,8 @@ COPY IngestSQL.py /app/IngestSQL.py
 # Make sure this file exists at build context root; rename if needed:
 COPY test_ingestsql.py /app/test_ingestsql.py
 
-ENV COVERAGE_FILE=/coverage/.coverage.kafkaconsumermssql
+ENV COVERAGE_FILE=/coverage/.coverage.kafkaconsumermssql \
+    COVERAGE_PROCESS_START=/app/.coveragerc
 CMD pytest -q \
   --maxfail=1 \
   --cov=kafkaconsumermssql \

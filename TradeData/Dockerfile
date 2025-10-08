@@ -28,7 +28,7 @@ WORKDIR /app
 FROM base AS test
 
 RUN mkdir -p /coverage && chmod 777 /coverage
-ENV COVERAGE_FILE=/coverage/.coverage.tradedata
+# ENV COVERAGE_FILE=/coverage/.coverage.tradedata
 
 # Install runtime + dev/test deps
 COPY requirements.txt requirements-dev.txt /app/
@@ -45,7 +45,8 @@ USER appuser
 
 # Default command for this stage: run test suite
 # CMD ["pytest", "-vv", "--cov=.", "--cov-report=term-missing"]
-ENV COVERAGE_FILE=/coverage/.coverage.tradedata
+ENV COVERAGE_FILE=/coverage/.coverage.tradedata \
+    COVERAGE_PROCESS_START=/app/.coveragerc
 CMD pytest -q \
   --maxfail=1 \
   --cov=TradeData \
