@@ -44,14 +44,14 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Default command for this stage: run test suite
-# CMD ["pytest", "-vv", "--cov=.", "--cov-report=term-missing"]
-ENV COVERAGE_FILE=/coverage/.coverage.tradedata \
-    COVERAGE_PROCESS_START=/app/.coveragerc
-CMD pytest -q \
-  --maxfail=1 \
-  --cov=TradeData \
-  --cov-report=xml:/coverage/tradedata-coverage.xml \
-  --cov-report=term-missing
+CMD ["pytest", "-vv", "--cov=.", "--cov-report=term-missing"]
+# ENV COVERAGE_FILE=/coverage/.coverage.tradedata \
+#     COVERAGE_PROCESS_START=/app/.coveragerc
+# CMD pytest -q \
+#   --maxfail=1 \
+#   --cov=TradeData \
+#   --cov-report=xml:/coverage/tradedata-coverage.xml \
+#   --cov-report=term-missing
 
 # ------------------------------
 # Runtime stage (lean, prod)
