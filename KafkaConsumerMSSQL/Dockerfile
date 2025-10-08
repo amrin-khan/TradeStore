@@ -44,8 +44,14 @@ COPY IngestSQL.py /app/IngestSQL.py
 # Make sure this file exists at build context root; rename if needed:
 COPY test_ingestsql.py /app/test_ingestsql.py
 
+ENV COVERAGE_FILE=/coverage/.coverage.kafkaconsumermssql
+CMD pytest -q \
+  --maxfail=1 \
+  --cov=kafkaconsumermssql \
+  --cov-report=xml:/coverage/kafkaconsumermssql-coverage.xml \
+  --cov-report=term-missing
 # Run test suite with coverage
-CMD ["pytest", "-vv", "--cov=/app", "--cov-report=term-missing", "/app/test_ingestsql.py"]
+# CMD ["pytest", "-vv", "--cov=/app", "--cov-report=term-missing", "/app/test_ingestsql.py"]
 
 ########################
 # 2) Runtime (your original)

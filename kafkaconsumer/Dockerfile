@@ -43,8 +43,14 @@ COPY test_kafkaconsumer.py /app/test_kafkaconsumer.py
 RUN chown -R appuser:appuser /app
 USER appuser
 
+ENV COVERAGE_FILE=/coverage/.coverage.kafkaconsumer
+CMD pytest -q \
+  --maxfail=1 \
+  --cov=kafkaconsumer \
+  --cov-report=xml:/coverage/kafkaconsumer-coverage.xml \
+  --cov-report=term-missing
 # Default command for the test image
-CMD ["pytest", "-vv", "--cov=/app", "--cov-report=term-missing", "/app/test_kafkaconsumer.py"]
+# CMD ["pytest", "-vv", "--cov=/app", "--cov-report=term-missing", "/app/test_kafkaconsumer.py"]
 
 ############################
 # Runtime image (lean, prod)

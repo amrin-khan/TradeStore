@@ -90,16 +90,22 @@ jobs:
 
       - name: Run unit tests - TradeData
         run: |
-          # run as an ephemeral container; exit code reflects pytest result
-          docker compose --profile test run --rm tradedata-tests
+          mkdir -p coverage
+          docker compose --profile test run --rm \
+            -v $PWD/coverage:/coverage \
+            tradedata-tests
 
       - name: Run unit tests - KafkaConsumer (Mongo)
         run: |
-          docker compose --profile test run --rm kafkaconsumer-tests
+          docker compose --profile test run --rm \
+            -v $PWD/coverage:/coverage \
+            kafkaconsumer-tests
 
       - name: Run unit tests - KafkaConsumerMSSQL
         run: |
-          docker compose --profile test run --rm ingestsql-tests
+          docker compose --profile test run --rm \
+            -v $PWD/coverage:/coverage \
+            ingestsql-tests
 
       - name: Collect coverage files from containers
         run: |
@@ -108,18 +114,22 @@ jobs:
           docker compose --profile test cp kafkaconsumer-tests:/coverage/kafkaconsumer-coverage.xml ./coverage/ || true
           docker compose --profile test cp ingestsql-tests:/coverage/ingestsql-coverage.xml ./coverage/ || true
 
-      - name: Merge coverage results
+      - name: Merge coverage and enforce threshold
         run: |
-          pip install coverage
-          coverage combine coverage/*.xml || true
+          python -m pip install --upgrade coverage
+          # Combine all raw data files in ./coverage
+          coverage combine coverage
+          # See a text summary and fail if below threshold (adjust number)
+          coverage report --fail-under=85
+          # Produce unified XML & HTML
+          coverage xml -o coverage/coverage.xml
           coverage html -d coverage/html
-          coverage report --fail-under=85   # enforce 85% threshold (change as needed)
-
+          
       - name: Upload coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: combined-coverage
+          name: coverage
           path: coverage/
 
 
